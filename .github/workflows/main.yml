@@ -31,4 +31,5 @@ jobs:
         # 將保險箱裡的鑰匙交給程式
         LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
         LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
-      run: python main.py
+      # 【關鍵修改】這裡改成您真正的檔名
+      run: python Gemini_V37_Auto_Line.py
