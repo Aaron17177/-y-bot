@@ -1,1 +1,269 @@
-{"cells":[{"cell_type":"code","source":["# ==========================================\n","# Gemini V37 Auto Commander (GitHub Actions 版) - Messaging API 升級版\n","# ------------------------------------------\n","# 功能：自動抓取數據 -> 訓練模型 -> 判斷趨勢 -> 發送 LINE 訊息\n","# 更新：已從 LINE Notify 遷移至 LINE Messaging API\n","# 更新2：訊息內容擴充，包含完整戰情室資訊\n","# ==========================================\n","\n","import os\n","import requests\n","import json\n","import warnings\n","import yfinance as yf\n","import pandas as pd\n","import numpy as np\n","from stable_baselines3 import PPO\n","import gymnasium as gym\n","from gymnasium import spaces\n","\n","warnings.filterwarnings(\"ignore\")\n","\n","# 從環境變數讀取 LINE Messaging API 設定\n","LINE_CHANNEL_ACCESS_TOKEN = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN')\n","LINE_USER_ID = os.environ.get('LINE_USER_ID')\n","\n","def send_line_push(msg):\n","    if not LINE_CHANNEL_ACCESS_TOKEN or not LINE_USER_ID:\n","        print(\"❌ 未設定 LINE_CHANNEL_ACCESS_TOKEN 或 LINE_USER_ID，無法發送通知\")\n","        print(\"--- 訊息內容 ---\")\n","        print(msg)\n","        return\n","\n","    url = 'https://api.line.me/v2/bot/message/push'\n","    headers = {\n","        'Content-Type': 'application/json',\n","        'Authorization': f'Bearer {LINE_CHANNEL_ACCESS_TOKEN}'\n","    }\n","\n","    # Messaging API 的 Payload 格式\n","    payload = {\n","        \"to\": LINE_USER_ID,\n","        \"messages\": [\n","            {\n","                \"type\": \"text\",\n","                \"text\": msg\n","            }\n","        ]\n","    }\n","\n","    try:\n","        response = requests.post(url, headers=headers, json=payload)\n","        if response.status_code == 200:\n","            print(\"✅ Line 訊息發送成功\")\n","        else:\n","            print(f\"❌ Line 發送失敗: {response.status_code}\")\n","            print(response.text)\n","    except Exception as e:\n","        print(f\"❌ 連線錯誤: {e}\")\n","\n","# ==========================================\n","# 1. 數據獲取與特徵工程\n","# ==========================================\n","print(\"正在連線數據庫...\")\n","START_DATE = '2015-01-01'\n","tickers = ['BTC-USD', '^VIX']\n","raw_data = yf.download(tickers, start=START_DATE, group_by='ticker', progress=False)\n","\n","df = pd.DataFrame()\n","try:\n","    if 'BTC-USD' in raw_data.columns:\n","        df['Close'] = raw_data['BTC-USD']['Close']\n","    elif 'Close' in raw_data.columns:\n","        df['Close'] = raw_data['Close']\n","\n","    if '^VIX' in raw_data.columns:\n","        df['VIX'] = raw_data['^VIX']['Close']\n","    else:\n","        df['VIX'] = 20.0\n","except KeyError:\n","    df['Close'] = raw_data.iloc[:, 0]\n","    df['VIX'] = 20.0\n","\n","df.ffill(inplace=True)\n","df.dropna(inplace=True)\n","\n","# 指標計算\n","df['SMA_140'] = df['Close'].rolling(window=140).mean()\n","df['Dist_Trend'] = (df['Close'] - df['SMA_140']) / df['SMA_140']\n","df['SMA_200'] = df['Close'].rolling(window=200).mean()\n","df['Mayer'] = df['Close'] / df['SMA_200']\n","df['VIX_Level'] = df['VIX'] / 30.0\n","\n","def calculate_rsi(series, period=14):\n","    delta = series.diff()\n","    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()\n","    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()\n","    rs = gain / loss\n","    return 100 - (100 / (1 + rs))\n","df['RSI'] = calculate_rsi(df['Close'])\n","\n","df.dropna(inplace=True)\n","train_df = df.copy()\n","\n","# ==========================================\n","# 2. AI 環境\n","# ==========================================\n","class GeminiFinalEnv(gym.Env):\n","    def __init__(self, dataframe):\n","        super(GeminiFinalEnv, self).__init__()\n","        self.df = dataframe\n","        self.current_step = 0\n","        self.action_space = spaces.Discrete(3)\n","        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(5,), dtype=np.float32)\n","        self.holdings = 0.0\n","\n","    def reset(self, seed=None, options=None):\n","        super().reset(seed=seed)\n","        self.current_step = 0\n","        self.holdings = 0.0\n","        return self._next_observation(), {}\n","\n","    def _next_observation(self):\n","        obs = np.array([\n","            self.df['Dist_Trend'].iloc[self.current_step],\n","            self.df['Mayer'].iloc[self.current_step] / 3.0,\n","            self.df['VIX_Level'].iloc[self.current_step],\n","            self.df['RSI'].iloc[self.current_step] / 100,\n","            float(self.holdings)\n","        ], dtype=np.float32)\n","        return np.nan_to_num(obs)\n","\n","    def step(self, action):\n","        self.current_step += 1\n","        target_pct = {0: 0.0, 1: 0.5, 2: 1.0}[int(action)]\n","\n","        # 風控邏輯\n","        if self.df['Mayer'].iloc[self.current_step] > 2.4:\n","            target_pct = min(target_pct, 0.5)\n","        if self.df['Dist_Trend'].iloc[self.current_step] < 0:\n","            if self.df['RSI'].iloc[self.current_step] > 30:\n","                target_pct = 0.0\n","        if self.df['VIX_Level'].iloc[self.current_step] > 1.0:\n","            target_pct = 0.0\n","\n","        btc_ret = self.df['Close'].iloc[self.current_step] / self.df['Close'].iloc[self.current_step-1] - 1\n","        reward = target_pct * btc_ret * 100\n","        if self.df['Dist_Trend'].iloc[self.current_step] > 0 and target_pct == 1.0:\n","            reward += 0.01\n","\n","        done = self.current_step >= len(self.df) - 2\n","        return self._next_observation(), reward, done, False, {}\n","\n","# ==========================================\n","# 3. 訓練與預測\n","# ==========================================\n","print(\"AI 正在分析歷史數據...\")\n","env_train = GeminiFinalEnv(train_df)\n","model = PPO(\"MlpPolicy\", env_train, verbose=0, learning_rate=0.0003, ent_coef=0.01)\n","# 為了節省 GitHub 資源，每日執行訓練步數可稍微降低，因為模型結構簡單\n","model.learn(total_timesteps=30000)\n","\n","# 生成今日訊號\n","env_live = GeminiFinalEnv(train_df)\n","obs, _ = env_live.reset()\n","for _ in range(len(train_df) - 1):\n","    action, _ = model.predict(obs)\n","    env_live.step(action)\n","    obs = env_live._next_observation()\n","\n","raw_action, _ = model.predict(obs)\n","raw_action = int(raw_action)\n","\n","# ==========================================\n","# 4. 生成 Line 報告\n","# ==========================================\n","latest_data = df.iloc[-1]\n","latest_date = df.index[-1].strftime('%Y-%m-%d')\n","latest_price = latest_data['Close']\n","sma140 = latest_data['SMA_140']\n","mayer = latest_data['Mayer']\n","vix = latest_data['VIX']\n","rsi = latest_data['RSI']\n","\n","target_pct = {0: 0.0, 1: 0.5, 2: 1.0}[raw_action]\n","status_icon = \"⚪\"\n","short_msg = \"\"\n","long_reason = \"\" # 新增詳細理由\n","\n","# 風控重現\n","is_bull = latest_data['Dist_Trend'] > 0\n","is_overheated = latest_data['Mayer'] > 2.4\n","is_oversold = latest_data['RSI'] < 30\n","is_panic = latest_data['VIX'] > 30\n","\n","if is_panic:\n","    target_pct = 0.0\n","    status_icon = \"🌪️\"\n","    short_msg = \"恐慌避險 (Cash Only)\"\n","    long_reason = \"VIX 指數過高 (>30)，市場極度不穩，強制空倉保命。\"\n","elif is_overheated:\n","    target_pct = min(target_pct, 0.5)\n","    status_icon = \"⚠️\"\n","    short_msg = \"過熱減碼 (Max 50%)\"\n","    long_reason = \"Mayer 倍數 > 2.4，價格嚴重偏離均線，強制減碼鎖定利潤。\"\n","elif not is_bull:\n","    if is_oversold:\n","        status_icon = \"⚡\"\n","        short_msg = \"熊市搶反彈 (High Risk)\"\n","        long_reason = \"雖然處於熊市 (價格 < 140日線)，但 RSI 超賣，嘗試搶短 (高風險)。\"\n","    else:\n","        target_pct = 0.0\n","        status_icon = \"🛑\"\n","        short_msg = \"空倉觀望 (Trend Off)\"\n","        long_reason = \"【熊市防禦】價格跌破 140日生命線，且無超賣訊號，強制空倉等待趨勢回穩。\"\n","else:\n","    if raw_action == 2:\n","        status_icon = \"🚀\"\n","        short_msg = \"滿倉進攻 (Full BTC)\"\n","        long_reason = \"【順勢進攻】價格站穩 140日線，估值合理，動能強勁。建議滿倉持有。\"\n","    elif raw_action == 1:\n","        status_icon = \"⚖️\"\n","        short_msg = \"半倉震盪 (50% BTC)\"\n","        long_reason = \"【震盪持有】趨勢向上但動能減弱，建議半倉持有，進可攻退可守。\"\n","    else:\n","        status_icon = \"🛡️\"\n","        short_msg = \"保守觀望\"\n","        long_reason = \"【保守觀望】趨勢雖向上，但 AI 偵測到潛在風險，選擇暫時空倉。\"\n","\n","# 計算建議金額 (範例本金: 100萬)\n","base_capital = 1000000\n","btc_amount = base_capital * target_pct\n","cash_amount = base_capital * (1 - target_pct)\n","\n","# 組合完整訊息 (Rich Message)\n","message = f\"\"\"\n","=========================\n","🏆 Gemini V37 實戰戰情室\n","📅 數據日期: {latest_date}\n","=========================\n","\n","📊 [市場健康度體檢]\n","   💰 BTC 價格 : ${latest_price:,.2f}\n","   📈 趨勢線 (140MA): ${sma140:,.2f}   {'✅ 多頭' if is_bull else '❌ 空頭'}\n","   🌡️ 估值 (Mayer): {mayer:.2f}        {'🔥 過熱' if is_overheated else '❄️ 合理'}\n","   🌊 恐慌 (VIX)  : {vix:.2f}        {'🌪️ 恐慌' if is_panic else '😌 穩定'}\n","   ⚡ 動能 (RSI)  : {rsi:.2f}\n","\n","📢 [AI 指揮官指令]\n","   {status_icon} {long_reason}\n","\n","💼 [建議倉位配置] (範例本金: 100萬)\n","   -----------------------------------\n","   🟠 比特幣 (BTC) : {target_pct*100:>5.1f}%  (${btc_amount:,.0f})\n","   🟢 現  金 (USD) : {(1-target_pct)*100:>5.1f}%  (${cash_amount:,.0f})\n","   -----------------------------------\n","\n","⚙️ [操作備忘錄] (請嚴格遵守)\n","   1. 請每日早上 8:00 (美股收盤後) 執行一次本程式。\n","   2. 【買入規則】：若建議從空倉/半倉轉為滿倉，請分 3-5 天分批買進 (防假突破)。\n","   3. 【賣出規則】：若建議從持倉轉為空倉 (🛑)，請勿猶豫，一次果斷賣出 (避險優先)。\n","   4. 若建議倉位與目前持倉差距 > 10%，才需要進行調整 (省手續費)。\n","=========================\n","\"\"\"\n","\n","send_line_push(message)"],"outputs":[{"output_type":"error","ename":"ModuleNotFoundError","evalue":"No module named 'stable_baselines3'","traceback":["\u001b[0;31m---------------------------------------------------------------------------\u001b[0m","\u001b[0;31mModuleNotFoundError\u001b[0m                       Traceback (most recent call last)","\u001b[0;32m/tmp/ipython-input-2101170728.py\u001b[0m in \u001b[0;36m<cell line: 0>\u001b[0;34m()\u001b[0m\n\u001b[1;32m     14\u001b[0m \u001b[0;32mimport\u001b[0m \u001b[0mpandas\u001b[0m \u001b[0;32mas\u001b[0m \u001b[0mpd\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[1;32m     15\u001b[0m \u001b[0;32mimport\u001b[0m \u001b[0mnumpy\u001b[0m \u001b[0;32mas\u001b[0m \u001b[0mnp\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0;32m---> 16\u001b[0;31m \u001b[0;32mfrom\u001b[0m \u001b[0mstable_baselines3\u001b[0m \u001b[0;32mimport\u001b[0m \u001b[0mPPO\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[0m\u001b[1;32m     17\u001b[0m \u001b[0;32mimport\u001b[0m \u001b[0mgymnasium\u001b[0m \u001b[0;32mas\u001b[0m \u001b[0mgym\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n\u001b[1;32m     18\u001b[0m \u001b[0;32mfrom\u001b[0m \u001b[0mgymnasium\u001b[0m \u001b[0;32mimport\u001b[0m \u001b[0mspaces\u001b[0m\u001b[0;34m\u001b[0m\u001b[0;34m\u001b[0m\u001b[0m\n","\u001b[0;31mModuleNotFoundError\u001b[0m: No module named 'stable_baselines3'","","\u001b[0;31m---------------------------------------------------------------------------\u001b[0;32m\nNOTE: If your import is failing due to a missing package, you can\nmanually install dependencies using either !pip or !apt.\n\nTo view examples of installing some common dependencies, click the\n\"Open Examples\" button below.\n\u001b[0;31m---------------------------------------------------------------------------\u001b[0m\n"],"errorDetails":{"actions":[{"action":"open_url","actionText":"Open Examples","url":"/notebooks/snippets/importing_libraries.ipynb"}]}}],"execution_count":1,"metadata":{"id":"6wCEcZiiiWuu","executionInfo":{"status":"error","timestamp":1765693562240,"user_tz":-480,"elapsed":3084,"user":{"displayName":"翁偉智","userId":"11322938985921780198"}},"outputId":"e7afea0f-81fe-4dc9-db8d-214135fb26d3","colab":{"base_uri":"https://localhost:8080/","height":395}}}],"metadata":{"colab":{"provenance":[]},"kernelspec":{"display_name":"Python 3","name":"python3"}},"nbformat":4,"nbformat_minor":0}
+# ==========================================
+# Gemini V37 Auto Commander (GitHub Actions 版) - Messaging API 升級版
+# ------------------------------------------
+# 功能：自動抓取數據 -> 訓練模型 -> 判斷趨勢 -> 發送 LINE 訊息
+# 更新：已從 LINE Notify 遷移至 LINE Messaging API
+# 更新2：訊息內容擴充，包含完整戰情室資訊
+# ==========================================
+
+import os
+import requests
+import json
+import warnings
+import yfinance as yf
+import pandas as pd
+import numpy as np
+from stable_baselines3 import PPO
+import gymnasium as gym
+from gymnasium import spaces
+
+warnings.filterwarnings("ignore")
+
+# 從環境變數讀取 LINE Messaging API 設定
+LINE_CHANNEL_ACCESS_TOKEN = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN')
+LINE_USER_ID = os.environ.get('LINE_USER_ID')
+
+def send_line_push(msg):
+    if not LINE_CHANNEL_ACCESS_TOKEN or not LINE_USER_ID:
+        print("❌ 未設定 LINE_CHANNEL_ACCESS_TOKEN 或 LINE_USER_ID，無法發送通知")
+        print("--- 訊息內容 ---")
+        print(msg)
+        return
+    
+    url = 'https://api.line.me/v2/bot/message/push'
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': f'Bearer {LINE_CHANNEL_ACCESS_TOKEN}'
+    }
+    
+    # Messaging API 的 Payload 格式
+    payload = {
+        "to": LINE_USER_ID,
+        "messages": [
+            {
+                "type": "text",
+                "text": msg
+            }
+        ]
+    }
+    
+    try:
+        response = requests.post(url, headers=headers, json=payload)
+        if response.status_code == 200:
+            print("✅ Line 訊息發送成功")
+        else:
+            print(f"❌ Line 發送失敗: {response.status_code}")
+            print(response.text)
+    except Exception as e:
+        print(f"❌ 連線錯誤: {e}")
+
+# ==========================================
+# 1. 數據獲取與特徵工程
+# ==========================================
+print("正在連線數據庫...")
+START_DATE = '2015-01-01'
+tickers = ['BTC-USD', '^VIX']
+raw_data = yf.download(tickers, start=START_DATE, group_by='ticker', progress=False)
+
+df = pd.DataFrame()
+try:
+    if 'BTC-USD' in raw_data.columns:
+        df['Close'] = raw_data['BTC-USD']['Close']
+    elif 'Close' in raw_data.columns:
+        df['Close'] = raw_data['Close']
+    
+    if '^VIX' in raw_data.columns:
+        df['VIX'] = raw_data['^VIX']['Close']
+    else:
+        df['VIX'] = 20.0
+except KeyError:
+    df['Close'] = raw_data.iloc[:, 0]
+    df['VIX'] = 20.0
+
+df.ffill(inplace=True)
+df.dropna(inplace=True)
+
+# 指標計算
+df['SMA_140'] = df['Close'].rolling(window=140).mean()
+df['Dist_Trend'] = (df['Close'] - df['SMA_140']) / df['SMA_140']
+df['SMA_200'] = df['Close'].rolling(window=200).mean()
+df['Mayer'] = df['Close'] / df['SMA_200']
+df['VIX_Level'] = df['VIX'] / 30.0
+
+def calculate_rsi(series, period=14):
+    delta = series.diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+    rs = gain / loss
+    return 100 - (100 / (1 + rs))
+df['RSI'] = calculate_rsi(df['Close'])
+
+df.dropna(inplace=True)
+train_df = df.copy()
+
+# ==========================================
+# 2. AI 環境
+# ==========================================
+class GeminiFinalEnv(gym.Env):
+    def __init__(self, dataframe):
+        super(GeminiFinalEnv, self).__init__()
+        self.df = dataframe
+        self.current_step = 0
+        self.action_space = spaces.Discrete(3) 
+        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(5,), dtype=np.float32)
+        self.holdings = 0.0 
+
+    def reset(self, seed=None, options=None):
+        super().reset(seed=seed)
+        self.current_step = 0
+        self.holdings = 0.0
+        return self._next_observation(), {}
+    
+    def _next_observation(self):
+        obs = np.array([
+            self.df['Dist_Trend'].iloc[self.current_step],
+            self.df['Mayer'].iloc[self.current_step] / 3.0,
+            self.df['VIX_Level'].iloc[self.current_step],
+            self.df['RSI'].iloc[self.current_step] / 100,
+            float(self.holdings)
+        ], dtype=np.float32)
+        return np.nan_to_num(obs)
+
+    def step(self, action):
+        self.current_step += 1
+        target_pct = {0: 0.0, 1: 0.5, 2: 1.0}[int(action)]
+        
+        # 風控邏輯
+        if self.df['Mayer'].iloc[self.current_step] > 2.4:
+            target_pct = min(target_pct, 0.5)
+        if self.df['Dist_Trend'].iloc[self.current_step] < 0:
+            if self.df['RSI'].iloc[self.current_step] > 30: 
+                target_pct = 0.0
+        if self.df['VIX_Level'].iloc[self.current_step] > 1.0:
+            target_pct = 0.0
+
+        btc_ret = self.df['Close'].iloc[self.current_step] / self.df['Close'].iloc[self.current_step-1] - 1
+        reward = target_pct * btc_ret * 100
+        if self.df['Dist_Trend'].iloc[self.current_step] > 0 and target_pct == 1.0:
+            reward += 0.01
+            
+        done = self.current_step >= len(self.df) - 2
+        return self._next_observation(), reward, done, False, {}
+
+# ==========================================
+# 3. 訓練與預測
+# ==========================================
+print("AI 正在分析歷史數據...")
+env_train = GeminiFinalEnv(train_df)
+model = PPO("MlpPolicy", env_train, verbose=0, learning_rate=0.0003, ent_coef=0.01)
+# 為了節省 GitHub 資源，每日執行訓練步數可稍微降低，因為模型結構簡單
+model.learn(total_timesteps=30000)
+
+# 生成今日訊號
+env_live = GeminiFinalEnv(train_df)
+obs, _ = env_live.reset()
+for _ in range(len(train_df) - 1):
+    action, _ = model.predict(obs)
+    env_live.step(action)
+    obs = env_live._next_observation()
+
+raw_action, _ = model.predict(obs)
+raw_action = int(raw_action)
+
+# ==========================================
+# 4. 生成 Line 報告
+# ==========================================
+latest_data = df.iloc[-1]
+latest_date = df.index[-1].strftime('%Y-%m-%d')
+latest_price = latest_data['Close']
+sma140 = latest_data['SMA_140']
+mayer = latest_data['Mayer']
+vix = latest_data['VIX']
+rsi = latest_data['RSI']
+
+target_pct = {0: 0.0, 1: 0.5, 2: 1.0}[raw_action]
+status_icon = "⚪"
+short_msg = ""
+long_reason = ""
+
+# 風控重現
+is_bull = latest_data['Dist_Trend'] > 0
+is_overheated = latest_data['Mayer'] > 2.4
+is_oversold = latest_data['RSI'] < 30
+is_panic = latest_data['VIX'] > 30
+
+if is_panic:
+    target_pct = 0.0
+    status_icon = "🌪️"
+    short_msg = "恐慌避險 (Cash Only)"
+    long_reason = "VIX 指數過高 (>30)，市場極度不穩，強制空倉保命。"
+elif is_overheated:
+    target_pct = min(target_pct, 0.5)
+    status_icon = "⚠️"
+    short_msg = "過熱減碼 (Max 50%)"
+    long_reason = "Mayer 倍數 > 2.4，價格嚴重偏離均線，強制減碼鎖定利潤。"
+elif not is_bull:
+    if is_oversold:
+        status_icon = "⚡"
+        short_msg = "熊市搶反彈 (High Risk)"
+        long_reason = "雖然處於熊市 (價格 < 140日線)，但 RSI 超賣，嘗試搶短 (高風險)。"
+    else:
+        target_pct = 0.0
+        status_icon = "🛑"
+        short_msg = "空倉觀望 (Trend Off)"
+        long_reason = "【熊市防禦】價格跌破 140日生命線，且無超賣訊號，強制空倉等待趨勢回穩。"
+else:
+    if raw_action == 2:
+        status_icon = "🚀"
+        short_msg = "滿倉進攻 (Full BTC)"
+        long_reason = "【順勢進攻】價格站穩 140日線，估值合理，動能強勁。建議滿倉持有。"
+    elif raw_action == 1:
+        status_icon = "⚖️"
+        short_msg = "半倉震盪 (50% BTC)"
+        long_reason = "【震盪持有】趨勢向上但動能減弱，建議半倉持有，進可攻退可守。"
+    else:
+        status_icon = "🛡️"
+        short_msg = "保守觀望"
+        long_reason = "【保守觀望】趨勢雖向上，但 AI 偵測到潛在風險，選擇暫時空倉。"
+
+# 計算建議金額 (範例本金: 100萬)
+base_capital = 1000000 
+btc_amount = base_capital * target_pct
+cash_amount = base_capital * (1 - target_pct)
+
+# 組合完整訊息 (Rich Message)
+message = f"""
+=========================
+🏆 Gemini V37 實戰戰情室
+📅 數據日期: {latest_date}
+=========================
+
+📊 [市場健康度體檢]
+   💰 BTC 價格 : ${latest_price:,.2f}
+   📈 趨勢線 (140MA): ${sma140:,.2f}   {'✅ 多頭' if is_bull else '❌ 空頭'}
+   🌡️ 估值 (Mayer): {mayer:.2f}        {'🔥 過熱' if is_overheated else '❄️ 合理'}
+   🌊 恐慌 (VIX)  : {vix:.2f}        {'🌪️ 恐慌' if is_panic else '😌 穩定'}
+   ⚡ 動能 (RSI)  : {rsi:.2f}
+
+📢 [AI 指揮官指令]
+   {status_icon} {long_reason}
+
+💼 [建議倉位配置] (範例本金: 100萬)
+   -----------------------------------
+   🟠 比特幣 (BTC) : {target_pct*100:>5.1f}%  (${btc_amount:,.0f})
+   🟢 現  金 (USD) : {(1-target_pct)*100:>5.1f}%  (${cash_amount:,.0f})
+   -----------------------------------
+
+⚙️ [操作備忘錄] (請嚴格遵守)
+   1. 請每日早上 8:00 (美股收盤後) 執行一次本程式。
+   2. 【買入規則】：若建議從空倉/半倉轉為滿倉，請分 3-5 天分批買進 (防假突破)。
+   3. 【賣出規則】：若建議從持倉轉為空倉 (🛑)，請勿猶豫，一次果斷賣出 (避險優先)。
+   4. 若建議倉位與目前持倉差距 > 10%，才需要進行調整 (省手續費)。
+=========================
+"""
+
+# 印出到 Console 方便除錯
+print(message)
+
+# 發送到 LINE
+send_line_push(message)
