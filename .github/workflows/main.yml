@@ -2,10 +2,7 @@ name: Gemini V37 Daily Run
 
 on:
   schedule:
-    # 設定執行時間 (UTC 時間)
-    # UTC 00:00 = 台灣時間 08:00
     - cron: '0 0 * * *'
-  # 允許手動按按鈕執行 (方便測試)
   workflow_dispatch:
 
 jobs:
@@ -28,8 +25,7 @@ jobs:
 
     - name: Run Trading Bot
       env:
-        # 將保險箱裡的鑰匙交給程式
+        # 這裡就是接通 Secrets 的關鍵，縮排必須完全正確
         LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
         LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
-      # 【關鍵修改】這裡改成您真正的檔名
       run: python Gemini_V37_Auto_Line.py
