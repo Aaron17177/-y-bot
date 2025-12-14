@@ -1,34 +1,46 @@
 # ==========================================
-# Gemini V37 Auto Commander (GitHub Actions 版) - Messaging API 升級版
+# Gemini V37 Auto Commander (GitHub Actions 版) - 終極除錯版
 # ------------------------------------------
 # 功能：自動抓取數據 -> 訓練模型 -> 判斷趨勢 -> 發送 LINE 訊息
-# 更新：已從 LINE Notify 遷移至 LINE Messaging API
-# 更新2：訊息內容擴充，包含完整戰情室資訊
+# 除錯：
+# 1. 啟動時立即發送測試訊息 (確認連線)
+# 2. 印出 Token 前五碼 (確認變數讀取)
+# 3. 強制詳細輸出錯誤代碼
 # ==========================================
 
 import os
+import sys
 import requests
 import json
 import warnings
-import yfinance as yf
-import pandas as pd
-import numpy as np
-from stable_baselines3 import PPO
-import gymnasium as gym
-from gymnasium import spaces
+import time
 
-warnings.filterwarnings("ignore")
+# 0. 環境檢查與測試
+print("="*50)
+print("🔍 系統自我診斷開始...")
 
-# 從環境變數讀取 LINE Messaging API 設定
+# 讀取環境變數
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN')
 LINE_USER_ID = os.environ.get('LINE_USER_ID')
 
-def send_line_push(msg):
+# 除錯：檢查 Token 是否讀取成功
+if LINE_CHANNEL_ACCESS_TOKEN:
+    print(f"✅ Token 讀取成功！前五碼: {LINE_CHANNEL_ACCESS_TOKEN[:5]}...")
+else:
+    print("❌ 嚴重錯誤：Token 是空的！(None)")
+    print("   -> 請檢查 GitHub Settings > Secrets 是否名稱打錯？(必須是 LINE_CHANNEL_ACCESS_TOKEN)")
+
+if LINE_USER_ID:
+    print(f"✅ UserID 讀取成功！User ID: {LINE_USER_ID}")
+else:
+    print("❌ 嚴重錯誤：User ID 是空的！(None)")
+    print("   -> 請檢查 GitHub Settings > Secrets 是否名稱打錯？(必須是 LINE_USER_ID)")
+
+# 定義發送函數
+def send_line_push(msg, is_test=False):
     if not LINE_CHANNEL_ACCESS_TOKEN or not LINE_USER_ID:
-        print("❌ 未設定 LINE_CHANNEL_ACCESS_TOKEN 或 LINE_USER_ID，無法發送通知")
-        print("--- 訊息內容 ---")
-        print(msg)
-        return
+        print("❌ 無法發送：缺少 Token 或 User ID")
+        return False
     
     url = 'https://api.line.me/v2/bot/message/push'
     headers = {
@@ -36,34 +48,70 @@ def send_line_push(msg):
         'Authorization': f'Bearer {LINE_CHANNEL_ACCESS_TOKEN}'
     }
     
-    # Messaging API 的 Payload 格式
     payload = {
         "to": LINE_USER_ID,
-        "messages": [
-            {
-                "type": "text",
-                "text": msg
-            }
-        ]
+        "messages": [{"type": "text", "text": msg}]
     }
     
     try:
+        print(f"📡 正在發送{'測試' if is_test else '正式'}訊息...")
         response = requests.post(url, headers=headers, json=payload)
+        
         if response.status_code == 200:
-            print("✅ Line 訊息發送成功")
+            print("✅ 發送成功！(HTTP 200)")
+            return True
         else:
-            print(f"❌ Line 發送失敗: {response.status_code}")
-            print(response.text)
+            print(f"❌ 發送失敗！狀態碼: {response.status_code}")
+            print(f"❌ 錯誤回應: {response.text}")
+            # 如果是 400/401，強制報錯讓 GitHub 亮紅燈
+            if is_test: sys.exit(1) 
+            return False
+            
     except Exception as e:
         print(f"❌ 連線錯誤: {e}")
+        if is_test: sys.exit(1)
+        return False
+
+# --- 立即執行連線測試 ---
+print("\n🧪 正在執行 LINE 連線測試...")
+test_msg = "🔔 【系統測試】Gemini V37 正在啟動...如果您看到這則訊息，代表連線設定完全正確！請等待約 1-2 分鐘生成戰報。"
+success = send_line_push(test_msg, is_test=True)
+
+if not success:
+    print("⛔ 測試失敗，程式終止。請檢查 Secrets 設定。")
+    sys.exit(1)
+else:
+    print("🎉 測試通過！開始執行量化分析...")
+print("="*50)
+
+
+# ==========================================
+# 正式程式開始 (Loading Libraries...)
+# ==========================================
+try:
+    import yfinance as yf
+    import pandas as pd
+    import numpy as np
+    from stable_baselines3 import PPO
+    import gymnasium as gym
+    from gymnasium import spaces
+except ImportError as e:
+    print(f"❌ 套件匯入失敗: {e}")
+    sys.exit(1)
+
+warnings.filterwarnings("ignore")
 
 # ==========================================
 # 1. 數據獲取與特徵工程
 # ==========================================
-print("正在連線數據庫...")
+print("📥 [1/3] 正在下載數據...")
 START_DATE = '2015-01-01'
 tickers = ['BTC-USD', '^VIX']
-raw_data = yf.download(tickers, start=START_DATE, group_by='ticker', progress=False)
+try:
+    raw_data = yf.download(tickers, start=START_DATE, group_by='ticker', progress=False)
+except Exception as e:
+    print(f"❌ 下載失敗: {e}")
+    sys.exit(1)
 
 df = pd.DataFrame()
 try:
@@ -71,12 +119,15 @@ try:
         df['Close'] = raw_data['BTC-USD']['Close']
     elif 'Close' in raw_data.columns:
         df['Close'] = raw_data['Close']
+    else:
+        df['Close'] = raw_data.iloc[:, 0]
     
     if '^VIX' in raw_data.columns:
         df['VIX'] = raw_data['^VIX']['Close']
     else:
         df['VIX'] = 20.0
 except KeyError:
+    print("⚠️ 數據格式異常，嘗試強制讀取...")
     df['Close'] = raw_data.iloc[:, 0]
     df['VIX'] = 20.0
 
@@ -133,19 +184,14 @@ class GeminiFinalEnv(gym.Env):
         self.current_step += 1
         target_pct = {0: 0.0, 1: 0.5, 2: 1.0}[int(action)]
         
-        # 風控邏輯
-        if self.df['Mayer'].iloc[self.current_step] > 2.4:
-            target_pct = min(target_pct, 0.5)
+        if self.df['Mayer'].iloc[self.current_step] > 2.4: target_pct = min(target_pct, 0.5)
         if self.df['Dist_Trend'].iloc[self.current_step] < 0:
-            if self.df['RSI'].iloc[self.current_step] > 30: 
-                target_pct = 0.0
-        if self.df['VIX_Level'].iloc[self.current_step] > 1.0:
-            target_pct = 0.0
+            if self.df['RSI'].iloc[self.current_step] > 30: target_pct = 0.0
+        if self.df['VIX_Level'].iloc[self.current_step] > 1.0: target_pct = 0.0
 
         btc_ret = self.df['Close'].iloc[self.current_step] / self.df['Close'].iloc[self.current_step-1] - 1
         reward = target_pct * btc_ret * 100
-        if self.df['Dist_Trend'].iloc[self.current_step] > 0 and target_pct == 1.0:
-            reward += 0.01
+        if self.df['Dist_Trend'].iloc[self.current_step] > 0 and target_pct == 1.0: reward += 0.01
             
         done = self.current_step >= len(self.df) - 2
         return self._next_observation(), reward, done, False, {}
@@ -153,11 +199,10 @@ class GeminiFinalEnv(gym.Env):
 # ==========================================
 # 3. 訓練與預測
 # ==========================================
-print("AI 正在分析歷史數據...")
+print("🧠 [2/3] AI 正在分析歷史數據 (Training)...")
 env_train = GeminiFinalEnv(train_df)
 model = PPO("MlpPolicy", env_train, verbose=0, learning_rate=0.0003, ent_coef=0.01)
-# 為了節省 GitHub 資源，每日執行訓練步數可稍微降低，因為模型結構簡單
-model.learn(total_timesteps=30000)
+model.learn(total_timesteps=20000) # 稍微減少步數加速
 
 # 生成今日訊號
 env_live = GeminiFinalEnv(train_df)
@@ -173,6 +218,8 @@ raw_action = int(raw_action)
 # ==========================================
 # 4. 生成 Line 報告
 # ==========================================
+print("📤 [3/3] 準備發送戰報...")
+
 latest_data = df.iloc[-1]
 latest_date = df.index[-1].strftime('%Y-%m-%d')
 latest_price = latest_data['Close']
@@ -226,12 +273,10 @@ else:
         short_msg = "保守觀望"
         long_reason = "【保守觀望】趨勢雖向上，但 AI 偵測到潛在風險，選擇暫時空倉。"
 
-# 計算建議金額 (範例本金: 100萬)
 base_capital = 1000000 
 btc_amount = base_capital * target_pct
 cash_amount = base_capital * (1 - target_pct)
 
-# 組合完整訊息 (Rich Message)
 message = f"""
 =========================
 🏆 Gemini V37 實戰戰情室
@@ -258,12 +303,8 @@ message = f"""
    1. 請每日早上 8:00 (美股收盤後) 執行一次本程式。
    2. 【買入規則】：若建議從空倉/半倉轉為滿倉，請分 3-5 天分批買進 (防假突破)。
    3. 【賣出規則】：若建議從持倉轉為空倉 (🛑)，請勿猶豫，一次果斷賣出 (避險優先)。
-   4. 若建議倉位與目前持倉差距 > 10%，才需要進行調整 (省手續費)。
 =========================
 """
 
-# 印出到 Console 方便除錯
-print(message)
-
-# 發送到 LINE
+# 最後再次發送 (避免開頭成功但結尾失敗)
 send_line_push(message)
