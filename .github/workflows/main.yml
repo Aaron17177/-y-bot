@@ -1,4 +1,4 @@
-name: Gemini V37 Daily Run
+name: Gemini V41 Daily Run
 
 on:
   schedule:
