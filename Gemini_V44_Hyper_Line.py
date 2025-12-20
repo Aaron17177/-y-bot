@@ -1,10 +1,10 @@
 # ==========================================
-# Gemini V44 Hyper: Accumulation Engine (Messaging API Edition)
+# Gemini V44 Hyper: Accumulation Engine (Messaging API + Lazy Summary)
 # ------------------------------------------
 # [修正說明]
-# 1. 訊息開頭新增「📋 今日操作懶人包」。
-# 2. 增加詳細的 LINE 金鑰診斷功能。
-# 3. 專為 GitHub Actions 優化：優先讀取 Secrets，無需在程式碼填寫金鑰。
+# 1. 訊息開頭加回「📋 今日操作懶人包」。
+# 2. 完整支援 LINE Messaging API 與 GitHub Secrets。
+# 3. 包含 V44 Hyper 核心策略與 Smart DCA。
 # ==========================================
 
 import os
@@ -19,75 +19,53 @@ from datetime import datetime, timedelta
 warnings.filterwarnings("ignore")
 
 # ==========================================
-# 0. 環境檢查與 LINE 設定 (診斷模式)
+# 0. 環境檢查與 LINE 設定 (Messaging API)
 # ==========================================
 print("="*50)
-print("🔍 V44 系統啟動自我診斷...")
+print("🔍 V44 系統啟動自我診斷 (Messaging API)...")
 
-# 1. 嘗試從 GitHub Secrets (環境變數) 讀取
-# 只要您在 GitHub 設定好 Secrets，程式就會自動抓到這裡，不需要手動填寫
-env_token = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN')
-env_userid = os.environ.get('LINE_USER_ID')
+# 讀取 GitHub Secrets
+LINE_CHANNEL_ACCESS_TOKEN = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN')
+LINE_USER_ID = os.environ.get('LINE_USER_ID')
 
-# 2. 本地測試備用 (僅限在自己電腦執行時使用)
-# ⚠️ 注意：上傳到 GitHub 時，請保持以下兩行為空字串 ''，不要填寫！
+# 本地測試用 (如果在本地跑，請填入您的 Token/ID，上傳 GitHub 前請清空)
 LOCAL_TOKEN = ''
 LOCAL_USER_ID = ''
 
-# 決定最終使用的金鑰 (優先使用 GitHub Secrets)
-FINAL_TOKEN = env_token if env_token else LOCAL_TOKEN
-FINAL_USER_ID = env_userid if env_userid else LOCAL_USER_ID
+if not LINE_CHANNEL_ACCESS_TOKEN and LOCAL_TOKEN:
+    LINE_CHANNEL_ACCESS_TOKEN = LOCAL_TOKEN
+if not LINE_USER_ID and LOCAL_USER_ID:
+    LINE_USER_ID = LOCAL_USER_ID
 
-# --- 診斷報告 ---
-print(f"1. 檢查 Channel Access Token...")
-if FINAL_TOKEN:
-    # 隱藏中間部分，只顯示前後碼以供確認
-    masked = FINAL_TOKEN[:4] + "..." + FINAL_TOKEN[-4:] if len(FINAL_TOKEN) > 8 else "***"
-    print(f"   ✅ Token 已載入 ({masked})")
-    if env_token:
-        print("      (來源: GitHub Secrets)")
-    else:
-        print("      (來源: 本地設定)")
+if LINE_CHANNEL_ACCESS_TOKEN and LINE_USER_ID:
+    print(f"✅ Token 讀取成功: {LINE_CHANNEL_ACCESS_TOKEN[:5]}...")
+    print(f"✅ UserID 讀取成功: {LINE_USER_ID[:5]}...")
 else:
-    print(f"   ❌ Token 未找到！")
-    print("      請確認 GitHub Secrets 名稱是否為 'LINE_CHANNEL_ACCESS_TOKEN'")
-
-print(f"2. 檢查 User ID...")
-if FINAL_USER_ID:
-    masked_uid = FINAL_USER_ID[:4] + "..." + FINAL_USER_ID[-4:] if len(FINAL_USER_ID) > 8 else "***"
-    print(f"   ✅ User ID 已載入 ({masked_uid})")
-    if env_userid:
-        print("      (來源: GitHub Secrets)")
-    else:
-        print("      (來源: 本地設定)")
-else:
-    print(f"   ❌ User ID 未找到！")
-    print("      請確認 GitHub Secrets 名稱是否為 'LINE_USER_ID'")
+    print("❌ 警告：未檢測到 LINE 金鑰！將無法發送通知。")
+    print("   請確認 GitHub Secrets: 'LINE_CHANNEL_ACCESS_TOKEN' 與 'LINE_USER_ID'")
 
 def send_line_push(msg):
-    if not FINAL_TOKEN or not FINAL_USER_ID:
-        print("\n⚠️ [取消發送] 金鑰不完整，無法發送 LINE 通知。")
+    if not LINE_CHANNEL_ACCESS_TOKEN or not LINE_USER_ID:
+        print("⚠️ 跳過發送：金鑰不完整")
         return
 
     url = 'https://api.line.me/v2/bot/message/push'
     headers = {
         'Content-Type': 'application/json',
-        'Authorization': f'Bearer {FINAL_TOKEN}'
+        'Authorization': f'Bearer {LINE_CHANNEL_ACCESS_TOKEN}'
     }
     payload = {
-        "to": FINAL_USER_ID,
+        "to": LINE_USER_ID,
         "messages": [{"type": "text", "text": msg}]
     }
     
     try:
-        print("\n📤 正在推送 LINE 訊息...")
+        print("📤 正在推送 LINE 訊息...")
         response = requests.post(url, headers=headers, json=payload)
         if response.status_code == 200:
-            print("✅ 發送成功！請檢查手機。")
+            print("✅ 發送成功！")
         else:
-            print(f"❌ 發送失敗！狀態碼: {response.status_code}")
-            print(f"   回應: {response.text}")
-            print("   (可能是 Token 過期或 User ID 錯誤)")
+            print(f"❌ 發送失敗: {response.status_code} {response.text}")
     except Exception as e:
         print(f"❌ 網絡錯誤: {e}")
 
@@ -112,9 +90,9 @@ except ImportError:
 # ⚙️ 用戶資產設定
 # ==========================================
 USER_CONFIG = {
-    'CURRENT_ASSETS': 3000000,  
-    'TARGET_WEALTH': 20000000,  
-    'PENDLE_INTEREST_ACC': 5000 
+    'CURRENT_ASSETS': 3000000,  # 目前總資產 (TWD)
+    'TARGET_WEALTH': 20000000,  # 目標金額 (TWD)
+    'PENDLE_INTEREST_ACC': 5000 # 累積未投入的利息 (TWD)
 }
 
 STRATEGY_PARAMS = {
@@ -129,8 +107,9 @@ STRATEGY_PARAMS = {
 # 1. 數據引擎
 # ==========================================
 def fetch_data():
-    print(f"\n{Fore.CYAN}📥 正在連線全球數據庫...{Style.RESET}")
+    print(f"\n{Fore.CYAN}📥 正在連線全球數據庫 (BTC/ETH/SOL/VIX)...{Style.RESET}")
     tickers = ['BTC-USD', 'ETH-USD', 'SOL-USD', '^VIX']
+    # 抓取 500 天數據以確保 SMA 計算正確
     start_date = (datetime.now() - timedelta(days=500)).strftime('%Y-%m-%d')
     try:
         data = yf.download(tickers, start=start_date, group_by='ticker', progress=False)
@@ -168,9 +147,6 @@ def process_data(raw_data):
         data_map[symbol] = df
     return data_map
 
-# ==========================================
-# 2. 核心策略邏輯
-# ==========================================
 def analyze_market(data_map):
     status = {}
     today = data_map['BTC'].index[-1]
@@ -180,6 +156,7 @@ def analyze_market(data_map):
     status['VIX'] = vix
     status['IS_PANIC'] = vix > STRATEGY_PARAMS['VIX_PANIC']
     
+    # 先判斷 BTC 狀態 (大哥濾網)
     btc_row = data_map['BTC'].loc[today]
     is_btc_bull = btc_row['Close'] > btc_row['SMA_140']
     
@@ -199,7 +176,7 @@ def analyze_market(data_map):
         signal_text = "HOLD"
         target_pct = 0.0
         reason = ""
-        action_short = "持有"
+        action_short = "持有" # 懶人包專用簡訊
         
         if status['IS_PANIC']:
             signal_text = "🌪️ 恐慌避險 (0%)"
@@ -250,8 +227,29 @@ def analyze_market(data_map):
             'TargetPct': target_pct,
             'Reason': reason
         }
-        
     return status, today
+
+# ==========================================
+# 2. 紀律提醒模組
+# ==========================================
+def print_discipline(status):
+    print(f"\n{Fore.CYAN}🧘 V44 交易心理與紀律提醒 (Mindset Check):{Style.RESET}")
+    if status['IS_PANIC']:
+        print(f"   ⚠️  {Fore.RED}檢測到市場極度恐慌 (VIX > 30){Style.RESET}")
+        return "\n⚠️ 市場極度恐慌 (VIX > 30)，請相信系統持有現金，勿手動接刀。"
+    
+    is_greed = any(status[c]['Mayer'] > STRATEGY_PARAMS['MAYER_GREED'] for c in ['BTC', 'ETH', 'SOL'])
+    if is_greed:
+        print(f"   🤑 {Fore.YELLOW}檢測到市場過熱 (Mayer > 2.4){Style.RESET}")
+        return "\n🤑 市場過熱 (Mayer > 2.4)，請執行減倉鎖住利潤。"
+        
+    is_choppy = any(abs(status[c]['Price'] - status[c]['SMA_140']) / status[c]['SMA_140'] < 0.02 for c in ['BTC', 'ETH', 'SOL'])
+    if is_choppy:
+        print(f"   😴 {Fore.WHITE}檢測到趨勢不明確{Style.RESET}")
+        return "\n😴 趨勢不明確，忍受無聊，不要亂動。"
+        
+    print(f"   🌱 {Fore.GREEN}市場處於正常波動範圍{Style.RESET}")
+    return "\n🌱 市場正常波動，專注本業加大本金，目標 2000 萬。"
 
 # ==========================================
 # 3. 訊息生成 (Report Generator)
@@ -259,9 +257,12 @@ def analyze_market(data_map):
 def generate_report(status, today_date):
     assets = USER_CONFIG['CURRENT_ASSETS']
     target = USER_CONFIG['TARGET_WEALTH']
+    progress = (assets / target) * 100
     date_str = today_date.strftime('%Y-%m-%d')
     
+    # -------------------------
     # 懶人包區塊
+    # -------------------------
     interest_action = "無"
     is_bear_btc = status['BTC']['TargetPct'] == 0
     btc_rsi = status['BTC']['RSI']
@@ -283,12 +284,21 @@ def generate_report(status, today_date):
     msg += f"💵 利息: {interest_action}\n"
     msg += f"-------------------------\n\n"
     
-    msg += f"🏆 V44 三核戰情室詳情\n"
+    # -------------------------
+    # 詳細戰情區塊
+    # -------------------------
+    msg += f"🏆 V44 三核戰情室\n"
     msg += f"=========================\n"
     
-    total_allocation = 0.0
+    # 資產進度
+    msg += f"💰 資產: ${assets/10000:.0f}萬 ({progress:.1f}%)\n"
     
-    # 幣種詳情
+    vix = status['VIX']
+    vix_state = "🔴恐慌!" if status['IS_PANIC'] else "🟢安全"
+    msg += f"🌍 環境: VIX {vix:.1f} ({vix_state})\n"
+    msg += "-" * 20 + "\n"
+    
+    total_allocation = 0.0
     icons = {'BTC': '🟠', 'ETH': '🔵', 'SOL': '🟣'}
     
     for coin in ['BTC', 'ETH', 'SOL']:
@@ -305,7 +315,7 @@ def generate_report(status, today_date):
         
     cash_allocation = 1.0 - total_allocation
     
-    # 資產配置
+    # 資產配置建議
     msg += f"-------------------------\n"
     msg += f"💼 [總資產建議配置]\n"
     msg += f"   🟠 BTC : {status['BTC']['BaseWeight']*status['BTC']['TargetPct']*100:>4.1f}%\n"
@@ -314,7 +324,7 @@ def generate_report(status, today_date):
     msg += f"   🟢 Cash: {cash_allocation*100:>4.1f}%\n"
     msg += f"-------------------------\n\n"
     
-    # 利息操作提醒
+    # 利息操作提醒 (Smart DCA)
     msg += f"💡 利息 Smart DCA:\n"
     if is_bear_btc:
         trigger = STRATEGY_PARAMS['RSI_SNIPER']
@@ -329,14 +339,13 @@ def generate_report(status, today_date):
 
     # 紀律提醒
     msg += f"\n💡 紀律提醒:\n"
-    if status['IS_PANIC']:
-        msg += "⚠️ 市場恐慌，請嚴格執行空倉，勿接刀！\n"
-    elif any(s['ActionShort'] == "減倉" for s in status.values()):
-        msg += "🤑 市場過熱，分批止盈是為了走更長的路。\n"
-    else:
-        msg += "1. SOL 波動大，嚴格遵守 20% 上限。\n"
-        msg += "2. 熊市紀律：BTC 轉空時，SOL 必須清倉。\n"
+    msg += "1. SOL 波動大，嚴格遵守 20% 上限。\n"
+    msg += "2. 熊市紀律：BTC 轉空時，SOL 必須清倉。\n"
     
+    # 附加動態心理建設
+    discipline_msg = print_discipline(status) # 這會在 Console 印出
+    msg += discipline_msg # 這會加到 LINE 訊息
+
     return msg
 
 # ==========================================
