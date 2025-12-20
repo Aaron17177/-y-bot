@@ -1,0 +1,294 @@
+# ==========================================
+# Gemini V44 Hyper: Retirement Engine (Phase 2)
+# ------------------------------------------
+# 這是專為「永續收租期 (Retirement Phase)」設計的執行腳本。
+# 目標：保本第一，穩定提供現金流，並監控現金帳篷水位。
+#
+# [核心策略 - 防守型]
+# 1. 配置調整: 50% BTC / 40% ETH / 10% SOL (降低 SOL 波動)
+# 2. 提款邏輯:
+#    - 牛市: 被動止盈 (賣幣換現金)
+#    - 熊市: 優先使用 Pendle 利息，不足則消耗本金
+# 3. 監控: 現金帳篷 (Cash Tent) 水位預警
+#
+# [如何使用]
+# 1. 修改 'USER_CONFIG' 輸入目前資產與提款需求。
+# 2. 執行程式：python v44_hyper_retirement.py
+# ==========================================
+
+import sys
+import subprocess
+import warnings
+import pandas as pd
+import numpy as np
+import requests
+from datetime import datetime, timedelta
+
+warnings.filterwarnings("ignore")
+
+# 自動安裝依賴
+try:
+    import yfinance as yf
+except ImportError:
+    print("📦 正在安裝必要套件 (yfinance)...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "yfinance"])
+    import yfinance as yf
+
+try:
+    import colorama
+    from colorama import Fore, Style
+    colorama.init(autoreset=True)
+except ImportError:
+    class Fore: RED=GREEN=YELLOW=CYAN=MAGENTA=WHITE=RESET=""
+    class Style: BRIGHT=RESET=""
+
+# ==========================================
+# ⚙️ 用戶設定 (USER_CONFIG)
+# ==========================================
+USER_CONFIG = {
+    'CURRENT_ASSETS': 30000000,   # 輸入目前的總資產 (TWD)
+    'CASH_TENT_SIZE': 6000000,    # 現金帳篷水位 (TWD) - 保命錢
+    'MONTHLY_WITHDRAW': 166666,   # 每月預計提領金額 (TWD)
+    'PENDLE_INTEREST_RATE': 0.05, # 目前 Pendle/美債 年化利率 (5%)
+    
+    # [重要] LINE Token
+    'LINE_TOKEN': '您的LINE_TOKEN_貼在這裡' 
+}
+
+# 策略參數 (防守型配置)
+STRATEGY_PARAMS = {
+    'SMA_TREND': 140,
+    'SMA_MAYER': 200,
+    'VIX_PANIC': 30,
+    'MAYER_GREED': 2.4
+}
+
+# 權重配置 (Phase 2)
+ALLOCATION = {'BTC': 0.5, 'ETH': 0.4, 'SOL': 0.1}
+
+# ==========================================
+# 1. 數據與策略邏輯
+# ==========================================
+def fetch_data():
+    print(f"\n{Fore.CYAN}📥 正在掃描市場數據 (退休模式)...{Style.RESET}")
+    tickers = ['BTC-USD', 'ETH-USD', 'SOL-USD', '^VIX']
+    start_date = (datetime.now() - timedelta(days=400)).strftime('%Y-%m-%d')
+    try:
+        data = yf.download(tickers, start=start_date, group_by='ticker', progress=False)
+    except Exception as e:
+        print(f"{Fore.RED}❌ 數據下載失敗: {e}{Style.RESET}")
+        sys.exit()
+    return data
+
+def process_data(raw_data):
+    data_map = {}
+    tickers_map = {'BTC': 'BTC-USD', 'ETH': 'ETH-USD', 'SOL': 'SOL-USD', 'VIX': '^VIX'}
+    
+    for symbol, ticker in tickers_map.items():
+        df = pd.DataFrame()
+        try:
+            if ticker in raw_data.columns.levels[0]:
+                df['Close'] = raw_data[ticker]['Close']
+            elif ticker == 'BTC-USD': 
+                 if 'Close' in raw_data.columns: df['Close'] = raw_data['Close']
+        except: pass
+            
+        if df.empty: continue
+        df.ffill(inplace=True)
+        
+        df['SMA_140'] = df['Close'].rolling(window=140).mean()
+        df['SMA_200'] = df['Close'].rolling(window=200).mean()
+        df['Mayer'] = df['Close'] / df['SMA_200']
+        
+        data_map[symbol] = df
+    return data_map
+
+def analyze_market(data_map):
+    status = {}
+    today = data_map['BTC'].index[-1]
+    
+    try: vix = data_map['VIX'].loc[today]['Close']
+    except: vix = 20.0
+    status['VIX'] = vix
+    status['IS_PANIC'] = vix > STRATEGY_PARAMS['VIX_PANIC']
+    
+    # 判斷整體趨勢 (用於提款建議)
+    bull_count = 0
+    
+    for coin in ['BTC', 'ETH', 'SOL']:
+        row = data_map[coin].loc[today]
+        price = row['Close']
+        sma = row['SMA_140']
+        mayer = row['Mayer']
+        
+        signal = "HOLD"
+        action_code = 0
+        
+        if status['IS_PANIC']:
+            signal = "ESCAPE (Cash)"
+            action_code = -1
+        elif mayer > STRATEGY_PARAMS['MAYER_GREED']:
+            signal = "TRIM (50%)"
+            action_code = -1
+            bull_count += 1
+        elif price > sma:
+            signal = "BUY/HOLD (100%)"
+            action_code = 1
+            bull_count += 1
+        else:
+            signal = "SELL (0%)"
+            action_code = -1
+            
+        status[coin] = {
+            'Price': price, 'SMA_140': sma, 'Mayer': mayer,
+            'Signal': signal, 'Action': action_code
+        }
+    
+    status['MARKET_STATE'] = "BULL" if bull_count >= 2 else "BEAR"
+    return status, today
+
+# ==========================================
+# 2. 提款與紀律建議模組
+# ==========================================
+def get_withdrawal_advice(status):
+    monthly = USER_CONFIG['MONTHLY_WITHDRAW']
+    tent = USER_CONFIG['CASH_TENT_SIZE']
+    assets = USER_CONFIG['CURRENT_ASSETS']
+    
+    # 計算預估利息收入 (若全現金)
+    yearly_interest = assets * 0.8 * USER_CONFIG['PENDLE_INTEREST_RATE'] 
+    interest_coverage = (yearly_interest / (monthly * 12)) * 100
+    
+    advice = ""
+    source = ""
+    
+    if status['MARKET_STATE'] == "BULL":
+        advice = f"🟢 [牛市提款建議]\n"
+        advice += f"本月請直接「賣幣」提領 ${monthly:,.0f}。\n"
+        advice += "這屬於被動止盈，在資產增值時修剪樹枝。"
+        source = "來源: 交易所賣幣"
+    else:
+        advice = f"🔴 [熊市/空倉提款建議]\n"
+        advice += f"本月請使用「Pendle 利息」提領 ${monthly:,.0f}。\n"
+        advice += f"若利息不足，允許消耗部分本金 (USDT)。\n"
+        advice += f"目前利息覆蓋率: {interest_coverage:.0f}%"
+        source = "來源: Pendle 利息 / USDT 本金"
+        
+    return advice, source
+
+def generate_line_message(status, today_date):
+    assets = USER_CONFIG['CURRENT_ASSETS']
+    tent = USER_CONFIG['CASH_TENT_SIZE']
+    date_str = today_date.strftime('%Y-%m-%d')
+    
+    msg = f"\n[🏰 V44 收租戰報] {date_str}\n"
+    msg += f"總資產: ${assets/10000:.0f}萬\n"
+    msg += f"現金帳篷: ${tent/10000:.0f}萬 (保命錢)\n"
+    
+    vix = status['VIX']
+    vix_state = "🔴恐慌!" if status['IS_PANIC'] else "🟢安全"
+    msg += f"環境: VIX {vix:.1f} ({vix_state})\n"
+    msg += "-" * 15 + "\n"
+    
+    # 幣種指令
+    for coin in ['BTC', 'ETH', 'SOL']:
+        s = status[coin]
+        icon = "🟢" if s['Action'] == 1 else ("🔴" if s['Action'] == -1 else "🟡")
+        msg += f"{icon} {coin} ({int(ALLOCATION[coin]*100)}%): {s['Signal']}\n"
+    
+    msg += "-" * 15 + "\n"
+    
+    # 提款建議
+    advice_text, source = get_withdrawal_advice(status)
+    # 簡化 LINE 顯示
+    if status['MARKET_STATE'] == "BULL":
+        msg += "💵 [本月提款]\n👉 直接賣幣變現 (被動止盈)\n"
+    else:
+        msg += "🛡️ [本月提款]\n👉 使用 Pendle 利息/現金 (保護本金)\n"
+        
+    return msg
+
+def send_line_notify(message):
+    token = USER_CONFIG['LINE_TOKEN']
+    if token == '您的LINE_TOKEN_貼在這裡' or not token:
+        print(f"{Fore.YELLOW}⚠️ 未設定 LINE Token{Style.RESET}")
+        return
+
+    url = 'https://notify-api.line.me/api/notify'
+    headers = {'Authorization': f'Bearer {token}'}
+    data = {'message': message}
+    try:
+        requests.post(url, headers=headers, data=data)
+        print(f"{Fore.GREEN}✅ LINE 通知已發送{Style.RESET}")
+    except:
+        print(f"{Fore.RED}❌ LINE 發送失敗{Style.RESET}")
+
+# ==========================================
+# 3. 戰情儀表板 (Console)
+# ==========================================
+def print_dashboard(status, today_date):
+    assets = USER_CONFIG['CURRENT_ASSETS']
+    tent = USER_CONFIG['CASH_TENT_SIZE']
+    monthly = USER_CONFIG['MONTHLY_WITHDRAW']
+    
+    print("\n" + "="*60)
+    print(f"{Fore.CYAN}🏰 V44 Hyper 收租版戰情室 (Retirement Mode){Style.RESET}")
+    print(f"📅 日期: {today_date.strftime('%Y-%m-%d')}")
+    print(f"💰 總資產: ${assets:,.0f}")
+    print(f"⛺ 現金帳篷: ${tent:,.0f} (安全水位)")
+    print(f"💸 每月剛需: ${monthly:,.0f}")
+    print("="*60)
+    
+    vix = status['VIX']
+    vix_str = f"{Fore.RED}{vix:.2f} (恐慌!){Style.RESET}" if status['IS_PANIC'] else f"{Fore.GREEN}{vix:.2f} (安全){Style.RESET}"
+    print(f"🌍 市場氣象 (VIX): {vix_str}")
+    print("-" * 60)
+    
+    print(f"{Fore.YELLOW}⚔️ 投資組合 (防守型配置) 操作指令:{Style.RESET}")
+    for coin in ['BTC', 'ETH', 'SOL']:
+        s = status[coin]
+        if s['Action'] == 1: color = Fore.GREEN
+        elif s['Action'] == -1: color = Fore.RED
+        else: color = Fore.YELLOW
+        
+        print(f"💎 {coin:<3} ({int(ALLOCATION[coin]*100)}%): {Fore.WHITE}${s['Price']:,.2f}{Style.RESET}")
+        print(f"   • SMA140: ${s['SMA_140']:,.0f}")
+        print(f"   • Mayer:  {s['Mayer']:.2f}")
+        print(f"   👉 指令: {Style.BRIGHT}{color}{s['Signal']}{Style.RESET}")
+        print("-" * 20)
+
+    # 提款建議區塊
+    advice, source = get_withdrawal_advice(status)
+    print(f"\n{Fore.MAGENTA}🛡️ 雙油箱提款指引:{Style.RESET}")
+    print(advice)
+    print(f"👉 資金來源: {Fore.CYAN}{source}{Style.RESET}")
+    
+    print("="*60)
+    
+    # 紀律提醒
+    print(f"\n{Fore.CYAN}🧘 退休心態與紀律提醒:{Style.RESET}")
+    if status['MARKET_STATE'] == "BULL":
+        print("   😎 [牛市]: 資產正在增值，請安心提款去享受生活。")
+        print("   👉 記得不要把生活費拿回去加倉，那是貪婪的開始。")
+    else:
+        print("   🛡️ [熊市]: 資產暫時縮水是正常的，不要恐慌。")
+        print("   👉 您的現金帳篷和利息足夠支撐生活，不用賤賣資產。")
+        print("   👉 關掉看盤軟體，去公園散步吧。")
+    print("="*60 + "\n")
+
+# ==========================================
+# 主程式
+# ==========================================
+if __name__ == "__main__":
+    try:
+        raw = fetch_data()
+        processed = process_data(raw)
+        if processed and 'BTC' in processed:
+            stat, today = analyze_market(processed)
+            print_dashboard(stat, today)
+            line_msg = generate_line_message(stat, today)
+            send_line_notify(line_msg)
+        else:
+            print("❌ 無法獲取數據")
+    except Exception as e:
+        print(f"❌ 錯誤: {e}")
