@@ -2,6 +2,7 @@
 # Gemini V44 Hyper: Accumulation Engine (Ultimate Edition)
 # ------------------------------------------
 # 這是專為「資產累積期」設計的執行腳本。
+# 支援 GitHub Secrets，保護您的 LINE Token 安全。
 # 
 # [功能清單]
 # 1. 📊 戰情儀表板: 顯示即時幣價、指標、操作指令。
@@ -15,6 +16,7 @@ import warnings
 import pandas as pd
 import numpy as np
 import requests
+import os  # 新增 os 模組以讀取環境變數
 from datetime import datetime, timedelta
 
 warnings.filterwarnings("ignore")
@@ -43,8 +45,8 @@ USER_CONFIG = {
     'TARGET_WEALTH': 20000000,  # 您的第一階段目標 (TWD)
     'PENDLE_INTEREST_ACC': 5000, # 目前累積在 Pendle 未提領的利息 (TWD)
     
-    # [重要] 請填入您的 LINE Notify Token
-    # 申請網址: https://notify-bot.line.me/my/
+    # [重要] 本地執行時填這裡。
+    # 若在 GitHub Actions 執行，請在 Settings -> Secrets 設 LINE_TOKEN，這裡留空即可。
     'LINE_TOKEN': '您的LINE_TOKEN_貼在這裡' 
 }
 
@@ -182,10 +184,12 @@ def print_discipline(status):
     print("   💡 [提醒]：不要因為朋友賺了錢就隨意更改配置 (SOL 20% 已經很夠了)。")
 
 # ==========================================
-# 3. LINE 通知模組
+# 3. LINE 通知模組 (GitHub Secrets 支援)
 # ==========================================
 def send_line_notify(message):
-    token = USER_CONFIG['LINE_TOKEN']
+    # 優先從環境變數 (Secrets) 讀取，沒有才讀 Config (本地測試)
+    token = os.environ.get('LINE_TOKEN') or USER_CONFIG['LINE_TOKEN']
+    
     if token == '您的LINE_TOKEN_貼在這裡' or not token:
         print(f"{Fore.YELLOW}⚠️ 未設定 LINE Token，跳過發送。{Style.RESET}")
         return
