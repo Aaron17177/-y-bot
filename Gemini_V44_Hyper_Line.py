@@ -2,9 +2,9 @@
 # Gemini V44 Hyper: Accumulation Engine (Messaging API Edition)
 # ------------------------------------------
 # [修正說明]
-# 1. 訊息開頭新增「📋 今日操作懶人包」，一眼看出要做什麼。
-# 2. 保留詳細的倉位建議與理由。
-# 3. 支援 GitHub Secrets 與 LINE Messaging API。
+# 1. 訊息開頭新增「📋 今日操作懶人包」。
+# 2. 增加詳細的 LINE 金鑰診斷功能。
+# 3. 專為 GitHub Actions 優化：優先讀取 Secrets，無需在程式碼填寫金鑰。
 # ==========================================
 
 import os
@@ -19,50 +19,75 @@ from datetime import datetime, timedelta
 warnings.filterwarnings("ignore")
 
 # ==========================================
-# 0. 環境檢查與 LINE 設定
+# 0. 環境檢查與 LINE 設定 (診斷模式)
 # ==========================================
 print("="*50)
 print("🔍 V44 系統啟動自我診斷...")
 
-LINE_CHANNEL_ACCESS_TOKEN = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN')
-LINE_USER_ID = os.environ.get('LINE_USER_ID')
+# 1. 嘗試從 GitHub Secrets (環境變數) 讀取
+# 只要您在 GitHub 設定好 Secrets，程式就會自動抓到這裡，不需要手動填寫
+env_token = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN')
+env_userid = os.environ.get('LINE_USER_ID')
 
-# 本地測試用 (上傳 GitHub 前請清空)
+# 2. 本地測試備用 (僅限在自己電腦執行時使用)
+# ⚠️ 注意：上傳到 GitHub 時，請保持以下兩行為空字串 ''，不要填寫！
 LOCAL_TOKEN = ''
 LOCAL_USER_ID = ''
 
-if not LINE_CHANNEL_ACCESS_TOKEN and LOCAL_TOKEN:
-    LINE_CHANNEL_ACCESS_TOKEN = LOCAL_TOKEN
-if not LINE_USER_ID and LOCAL_USER_ID:
-    LINE_USER_ID = LOCAL_USER_ID
+# 決定最終使用的金鑰 (優先使用 GitHub Secrets)
+FINAL_TOKEN = env_token if env_token else LOCAL_TOKEN
+FINAL_USER_ID = env_userid if env_userid else LOCAL_USER_ID
 
-if LINE_CHANNEL_ACCESS_TOKEN and LINE_USER_ID:
-    print(f"✅ LINE 金鑰讀取成功")
+# --- 診斷報告 ---
+print(f"1. 檢查 Channel Access Token...")
+if FINAL_TOKEN:
+    # 隱藏中間部分，只顯示前後碼以供確認
+    masked = FINAL_TOKEN[:4] + "..." + FINAL_TOKEN[-4:] if len(FINAL_TOKEN) > 8 else "***"
+    print(f"   ✅ Token 已載入 ({masked})")
+    if env_token:
+        print("      (來源: GitHub Secrets)")
+    else:
+        print("      (來源: 本地設定)")
 else:
-    print("❌ 警告：未檢測到 LINE 金鑰！")
+    print(f"   ❌ Token 未找到！")
+    print("      請確認 GitHub Secrets 名稱是否為 'LINE_CHANNEL_ACCESS_TOKEN'")
+
+print(f"2. 檢查 User ID...")
+if FINAL_USER_ID:
+    masked_uid = FINAL_USER_ID[:4] + "..." + FINAL_USER_ID[-4:] if len(FINAL_USER_ID) > 8 else "***"
+    print(f"   ✅ User ID 已載入 ({masked_uid})")
+    if env_userid:
+        print("      (來源: GitHub Secrets)")
+    else:
+        print("      (來源: 本地設定)")
+else:
+    print(f"   ❌ User ID 未找到！")
+    print("      請確認 GitHub Secrets 名稱是否為 'LINE_USER_ID'")
 
 def send_line_push(msg):
-    if not LINE_CHANNEL_ACCESS_TOKEN or not LINE_USER_ID:
-        print("⚠️ 跳過發送：金鑰不完整")
+    if not FINAL_TOKEN or not FINAL_USER_ID:
+        print("\n⚠️ [取消發送] 金鑰不完整，無法發送 LINE 通知。")
         return
 
     url = 'https://api.line.me/v2/bot/message/push'
     headers = {
         'Content-Type': 'application/json',
-        'Authorization': f'Bearer {LINE_CHANNEL_ACCESS_TOKEN}'
+        'Authorization': f'Bearer {FINAL_TOKEN}'
     }
     payload = {
-        "to": LINE_USER_ID,
+        "to": FINAL_USER_ID,
         "messages": [{"type": "text", "text": msg}]
     }
     
     try:
-        print("📤 正在推送 LINE 訊息...")
+        print("\n📤 正在推送 LINE 訊息...")
         response = requests.post(url, headers=headers, json=payload)
         if response.status_code == 200:
-            print("✅ 發送成功！")
+            print("✅ 發送成功！請檢查手機。")
         else:
-            print(f"❌ 發送失敗: {response.status_code} {response.text}")
+            print(f"❌ 發送失敗！狀態碼: {response.status_code}")
+            print(f"   回應: {response.text}")
+            print("   (可能是 Token 過期或 User ID 錯誤)")
     except Exception as e:
         print(f"❌ 網絡錯誤: {e}")
 
@@ -174,7 +199,6 @@ def analyze_market(data_map):
         signal_text = "HOLD"
         target_pct = 0.0
         reason = ""
-        # 簡短指令用於懶人包
         action_short = "持有"
         
         if status['IS_PANIC']:
@@ -236,10 +260,8 @@ def generate_report(status, today_date):
     assets = USER_CONFIG['CURRENT_ASSETS']
     target = USER_CONFIG['TARGET_WEALTH']
     date_str = today_date.strftime('%Y-%m-%d')
-    next_check = (datetime.now() + timedelta(days=180)).strftime('%Y-%m-%d')
     
-    # --- 1. 懶人包區塊 ---
-    # 判斷利息操作
+    # 懶人包區塊
     interest_action = "無"
     is_bear_btc = status['BTC']['TargetPct'] == 0
     btc_rsi = status['BTC']['RSI']
