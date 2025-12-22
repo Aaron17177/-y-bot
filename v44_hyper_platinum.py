@@ -1,10 +1,21 @@
 # ==========================================
-# Gemini V44 Hyper: Accumulation Engine (Platinum Edition Fixed)
+# Gemini V44 Hyper: Accumulation Engine (Platinum Edition)
 # ------------------------------------------
-# [修復記錄]
-# 1. 修正 KeyError 'Mayer': 確保狀態字典包含所有必要指標。
-# 2. 更新 Ticker: RNDR -> RENDER-USD (代幣遷移)。
-# 3. 增強容錯: 下載失敗的幣種會自動跳過，不影響主程式運行。
+# [戰略目標]
+# 鎖定回測績效最高 (+14490%) 的「鉑金 16 支候選池」。
+#
+# [核心配置]
+# 1. 核心 (80%): BTC + ETH (SMA 140)
+# 2. 衛星 (20%): 冠軍輪動 (Platinum 16)
+#    - 名單: SOL, AVAX, BNB, DOGE, SHIB, RNDR, INJ, SUI, ADA, 
+#           TRX, XLM, BCH, ZEC, LTC, ETC, MATIC
+#    - 邏輯: 站上 SMA 60 + 20日漲幅最強
+#    - 換倉: 挑戰者動能 > 現任 + 15% (防抖動)
+#
+# [系統功能]
+# 1. LINE Messaging API 推播 (API Push)
+# 2. 支援 GitHub Secrets
+# 3. 修正 Colorama 與 Ticker 問題
 # ==========================================
 
 import os
@@ -19,14 +30,16 @@ from datetime import datetime, timedelta
 warnings.filterwarnings("ignore")
 
 # ==========================================
-# 0. 環境檢查與 LINE 設定
+# 0. 環境檢查與 LINE 設定 (Messaging API)
 # ==========================================
 print("="*50)
-print("🔍 V44 鉑金系統啟動 (Fix v2)...")
+print("🔍 V44 鉑金系統啟動...")
 
+# 讀取 GitHub Secrets
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN')
 LINE_USER_ID = os.environ.get('LINE_USER_ID')
 
+# 本地測試用 (上傳 GitHub 前請保持為空)
 LOCAL_TOKEN = ''
 LOCAL_USER_ID = ''
 
@@ -76,6 +89,7 @@ try:
     from colorama import Fore, Style, init
     init(autoreset=True)
 except:
+    # 定義空類別以防 colorama 未安裝或版本問題
     class Fore: RED=GREEN=YELLOW=CYAN=MAGENTA=WHITE=RESET=""
     class Style: BRIGHT=RESET_ALL=""
 
@@ -83,13 +97,17 @@ except:
 # ⚙️ 用戶設定
 # ==========================================
 USER_CONFIG = {
-    'CURRENT_ASSETS': 3000000, 
-    'TARGET_WEALTH': 20000000, 
+    'CURRENT_ASSETS': 3000000,  # 目前總資產 (TWD)
+    'TARGET_WEALTH': 20000000,  # 目標金額 (TWD)
+    
+    # [重要] 請填寫您「目前持有」的衛星幣種代號
+    # 範例: 'SOL', 'SHIB' 或 'NONE' (若空倉)
     'CURRENT_HOLDING_SAT': 'NONE',
-    'PENDLE_INTEREST_ACC': 5000
+
+    'PENDLE_INTEREST_ACC': 5000 # 累積利息
 }
 
-# 衛星候選池 (Platinum 16 - 修正 Ticker)
+# 衛星候選池 (Platinum 16 - 創造 +14490% 的組合)
 SATELLITE_POOL = {
     # --- 攻擊型公鏈 ---
     'SOL': 'SOL-USD', 'AVAX': 'AVAX-USD', 'BNB': 'BNB-USD',
@@ -99,21 +117,21 @@ SATELLITE_POOL = {
     'DOGE': 'DOGE-USD', 'SHIB': 'SHIB-USD',
     
     # --- AI / RWA / DeFi ---
-    'RNDR': 'RENDER-USD', # [修正] RNDR 改名為 RENDER
+    'RNDR': 'RENDER-USD', # [修正] 使用新代號 RENDER
     'INJ': 'INJ-USD',
     
     # --- 補漲型老幣 & L2 ---
     'TRX': 'TRX-USD', 'XLM': 'XLM-USD', 'BCH': 'BCH-USD', 'ZEC': 'ZEC-USD',
-    'LTC': 'LTC-USD', 'ETC': 'ETC-USD', 'MATIC': 'MATIC-USD' # 注意: MATIC 也在遷移 POL，若失敗可改 POL-USD
+    'LTC': 'LTC-USD', 'ETC': 'ETC-USD', 'MATIC': 'MATIC-USD'
 }
 
 STRATEGY_PARAMS = {
-    'SMA_CORE': 140,
-    'SMA_SATELLITE': 60,
+    'SMA_CORE': 140,     # 核心 (BTC/ETH)
+    'SMA_SATELLITE': 60, # 衛星 (輪動)
     'VIX_PANIC': 30,
     'MAYER_GREED': 2.4,
     'RSI_SNIPER': 45,
-    'SWITCH_THRESHOLD': 0.15 
+    'SWITCH_THRESHOLD': 0.15 # 換倉門檻 15%
 }
 
 # ==========================================
@@ -122,53 +140,40 @@ STRATEGY_PARAMS = {
 def fetch_data():
     print(f"\n{Fore.CYAN}📥 正在掃描鉑金候選池 (Top 16)...{Style.RESET_ALL}")
     tickers = ['BTC-USD', 'ETH-USD', '^VIX'] + list(SATELLITE_POOL.values())
-    
-    # 抓取 500 天數據確保 SMA 計算
     start_date = (datetime.now() - timedelta(days=500)).strftime('%Y-%m-%d')
-    
     try:
-        # 使用 auto_adjust=True 修正分割/股利影響
+        # 使用 auto_adjust=True 修正價格
         data = yf.download(tickers, start=start_date, group_by='ticker', progress=False, auto_adjust=True)
         return data
-    except Exception as e:
-        print(f"{Fore.RED}❌ 數據下載發生錯誤: {e}{Style.RESET_ALL}")
-        # 不直接退出，嘗試返回 None 讓後續處理
-        return None
+    except:
+        sys.exit()
+    return data
 
 def process_data(raw_data):
-    if raw_data is None or raw_data.empty:
-        return {}
-
     data_map = {}
     ticker_to_symbol = {'BTC-USD': 'BTC', 'ETH-USD': 'ETH', '^VIX': 'VIX'}
     for k, v in SATELLITE_POOL.items(): ticker_to_symbol[v] = k
     
-    # 處理 MultiIndex 列名
+    # 處理 MultiIndex
     if isinstance(raw_data.columns, pd.MultiIndex):
         level_0_cols = raw_data.columns.levels[0]
     else:
-        # 單一 Ticker 或格式不同時的容錯
-        return {}
+        return {} # 格式不符
 
     for ticker in level_0_cols:
         symbol = ticker_to_symbol.get(ticker)
         if not symbol: continue
         
         df = pd.DataFrame()
-        try:
-            # 優先使用 Close，如果沒有則嘗試 Adj Close (雖然 auto_adjust=True 後 Close 就是 Adj Close)
-            col_name = 'Close' if 'Close' in raw_data[ticker].columns else 'Adj Close'
-            df['Close'] = raw_data[ticker][col_name]
+        try: 
+            # 優先嘗試 Close，若無則嘗試 Adj Close
+            col = 'Close' if 'Close' in raw_data[ticker].columns else 'Adj Close'
+            df['Close'] = raw_data[ticker][col]
         except: continue
         
-        # 移除全空數據
-        if df['Close'].isnull().all():
-            print(f"⚠️ 警告: {symbol} 無數據，已跳過。")
-            continue
-            
+        if df['Close'].isnull().all(): continue
         df.ffill(inplace=True)
         
-        # 計算指標
         df['SMA_140'] = df['Close'].rolling(window=140).mean()
         df['SMA_60'] = df['Close'].rolling(window=60).mean()
         df['SMA_200'] = df['Close'].rolling(window=200).mean()
@@ -186,7 +191,7 @@ def process_data(raw_data):
     return data_map
 
 # ==========================================
-# 2. 策略邏輯
+# 2. 策略邏輯 (含輪動機制)
 # ==========================================
 def analyze_market(data_map):
     status = {}
@@ -228,16 +233,7 @@ def analyze_market(data_map):
             signal = "SELL (0%)"
             action_short = "空倉"
             
-        # [修正] 這裡加入了 Mayer 到字典中，解決 KeyError
-        status[coin] = {
-            'Price': price, 
-            'SMA': sma, 
-            'Mayer': mayer, 
-            'Signal': signal, 
-            'ActionShort': action_short, 
-            'TargetPct': target_pct, 
-            'RSI': rsi
-        }
+        status[coin] = {'Price': price, 'SMA': sma, 'Signal': signal, 'ActionShort': action_short, 'TargetPct': target_pct, 'RSI': rsi, 'Mayer': mayer}
 
     # --- 衛星部位 (Rotator) ---
     current_holding = USER_CONFIG['CURRENT_HOLDING_SAT']
@@ -251,6 +247,7 @@ def analyze_market(data_map):
             price = row['Close']
             sma60 = row['SMA_60']
             
+            # 過濾無效數據
             if pd.isna(score) or pd.isna(price) or pd.isna(sma60): continue
             
             is_valid = price > sma60
@@ -320,7 +317,6 @@ def analyze_market(data_map):
 # ==========================================
 def get_discipline_msg(status):
     msg = ""
-    # [修正] 這裡讀取 Mayer 時不會再報錯了
     if status['IS_PANIC']:
         msg += "⚠️ 市場恐慌 (VIX>30)，請相信系統，持有現金，勿手動接刀！"
     elif any(status[c]['Mayer'] > STRATEGY_PARAMS['MAYER_GREED'] for c in ['BTC', 'ETH']):
@@ -367,7 +363,8 @@ def generate_report(status, today_date):
     
     for c in ['BTC', 'ETH']:
         s = status[c]
-        msg += f"{c}: ${s['Price']:.0f} (MA ${s['SMA']:.0f})\n"
+        trend_status = "✅" if s['Price'] > s['SMA'] else "❌"
+        msg += f"{trend_status} {c}: ${s['Price']:,.0f} (MA ${s['SMA']:,.0f})\n"
         msg += f"👉 {s['Signal']}\n"
     msg += "-" * 20 + "\n"
     
@@ -378,9 +375,11 @@ def generate_report(status, today_date):
     msg += f"[動能排行榜 (Ret20)]\n"
     for c in sat['Top3']:
         star = "👑" if c['Coin'] == sat['Choice'] else ""
-        valid = "✅" if c['Valid'] else "❌"
+        valid = "✅" if c['Valid'] else "❌" # ✅=站上SMA60, ❌=跌破SMA60
         msg += f"{valid} {c['Coin']}: {c['Score']*100:+.1f}% {star}\n"
-        
+    
+    msg += "\n(註: ✅=站上SMA60強勢, ❌=跌破SMA60弱勢)\n"
+    
     msg += f"\n💡 紀律:\n"
     msg += get_discipline_msg(status)
     msg += f"\n👉 目前持有設定: {USER_CONFIG['CURRENT_HOLDING_SAT']}\n"
@@ -403,7 +402,7 @@ if __name__ == "__main__":
         if processed and 'BTC' in processed:
             stat, today = analyze_market(processed)
             line_msg = generate_report(stat, today)
-            print_dashboard_preview(line_msg)
+            # print(line_msg) # 本地測試用
             send_line_push(line_msg)
         else:
             print("❌ 無法獲取數據")
