@@ -15,6 +15,7 @@
 # [系統功能]
 # 1. LINE Messaging API 推播 (API Push)
 # 2. 支援 GitHub Secrets
+# 3. 修正: Colorama Style.RESET 錯誤
 # ==========================================
 
 import os
@@ -88,8 +89,9 @@ try:
     from colorama import Fore, Style, init
     init(autoreset=True)
 except:
+    # 兼容模式：若無 colorama 則定義空類別
     class Fore: RED=GREEN=YELLOW=CYAN=MAGENTA=WHITE=RESET=""
-    class Style: BRIGHT=RESET=""
+    class Style: BRIGHT=RESET_ALL=""
 
 # ==========================================
 # ⚙️ 用戶設定
@@ -135,7 +137,7 @@ STRATEGY_PARAMS = {
 # 1. 數據引擎
 # ==========================================
 def fetch_data():
-    print(f"\n{Fore.CYAN}📥 正在掃描鉑金候選池 (Top 16)...{Style.RESET}")
+    print(f"\n{Fore.CYAN}📥 正在掃描鉑金候選池 (Top 16)...{Style.RESET_ALL}")
     tickers = ['BTC-USD', 'ETH-USD', '^VIX'] + list(SATELLITE_POOL.values())
     start_date = (datetime.now() - timedelta(days=500)).strftime('%Y-%m-%d')
     try:
@@ -373,7 +375,13 @@ def generate_report(status, today_date):
     return msg
 
 # ==========================================
-# 4. 主程式
+# 4. 戰情儀表板 (Console Preview)
+# ==========================================
+def print_dashboard_preview(msg):
+    print("\n" + msg)
+
+# ==========================================
+# 主程式
 # ==========================================
 if __name__ == "__main__":
     try:
@@ -382,7 +390,7 @@ if __name__ == "__main__":
         if processed and 'BTC' in processed:
             stat, today = analyze_market(processed)
             line_msg = generate_report(stat, today)
-            # print(line_msg) # 本地測試用
+            print_dashboard_preview(line_msg)
             send_line_push(line_msg)
         else:
             print("❌ 無法獲取數據")
