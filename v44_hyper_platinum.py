@@ -137,7 +137,7 @@ STRATEGY_PARAMS = {
 def fetch_data():
     print(f"\n{Fore.CYAN}📥 正在掃描鉑金候選池 (Top 16)...{Style.RESET}")
     tickers = ['BTC-USD', 'ETH-USD', '^VIX'] + list(SATELLITE_POOL.values())
-    start_date = (datetime.now() - timedelta(days=400)).strftime('%Y-%m-%d')
+    start_date = (datetime.now() - timedelta(days=500)).strftime('%Y-%m-%d')
     try:
         data = yf.download(tickers, start=start_date, group_by='ticker', progress=False)
     except:
@@ -153,7 +153,7 @@ def process_data(raw_data):
     if isinstance(raw_data.columns, pd.MultiIndex):
         level_0_cols = raw_data.columns.levels[0]
     else:
-        return {}
+        return {} # 格式不符
 
     for ticker in level_0_cols:
         symbol = ticker_to_symbol.get(ticker)
@@ -183,7 +183,7 @@ def process_data(raw_data):
     return data_map
 
 # ==========================================
-# 2. 策略邏輯
+# 2. 策略邏輯 (含輪動機制)
 # ==========================================
 def analyze_market(data_map):
     status = {}
@@ -238,9 +238,6 @@ def analyze_market(data_map):
             score = row['Ret_20']
             price = row['Close']
             sma60 = row['SMA_60']
-            
-            # 過濾無效數據
-            if pd.isna(score) or pd.isna(price) or pd.isna(sma60): continue
             
             is_valid = price > sma60
             candidates.append({'Coin': coin, 'Score': score, 'Valid': is_valid, 'Price': price})
@@ -305,6 +302,21 @@ def analyze_market(data_map):
     return status, today
 
 # ==========================================
+# 2. 紀律提醒模組
+# ==========================================
+def get_discipline_msg(status):
+    msg = ""
+    if status['IS_PANIC']:
+        msg += "⚠️ 市場恐慌 (VIX>30)，請相信系統，持有現金，勿手動接刀！"
+    elif any(status[c]['Mayer'] > STRATEGY_PARAMS['MAYER_GREED'] for c in ['BTC', 'ETH']):
+        msg += "🤑 市場過熱 (Mayer>2.4)，請執行減倉鎖住利潤。"
+    else:
+        msg += "1. 衛星部位嚴守 20% 上限。\n"
+        msg += "2. 新幣動能 > 現持倉 + 15% 才換倉。\n"
+        msg += "3. 專注本業，加大本金，目標 2000 萬。"
+    return msg
+
+# ==========================================
 # 3. 訊息生成
 # ==========================================
 def generate_report(status, today_date):
@@ -355,8 +367,8 @@ def generate_report(status, today_date):
         msg += f"{valid} {c['Coin']}: {c['Score']*100:+.1f}% {star}\n"
         
     msg += f"\n💡 紀律:\n"
-    msg += f"1. 新幣動能 > 現持倉 + 15% 才換倉。\n"
-    msg += f"2. 目前持有設定: {USER_CONFIG['CURRENT_HOLDING_SAT']}\n"
+    msg += get_discipline_msg(status)
+    msg += f"\n👉 目前持有設定: {USER_CONFIG['CURRENT_HOLDING_SAT']}\n"
     
     return msg
 
@@ -370,7 +382,7 @@ if __name__ == "__main__":
         if processed and 'BTC' in processed:
             stat, today = analyze_market(processed)
             line_msg = generate_report(stat, today)
-            print(line_msg)
+            # print(line_msg) # 本地測試用
             send_line_push(line_msg)
         else:
             print("❌ 無法獲取數據")
