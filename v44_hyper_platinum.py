@@ -1,21 +1,16 @@
 # ==========================================
-# Gemini V44 Hyper: Accumulation Engine (Platinum Edition)
+# Gemini V44 Hyper: Accumulation Engine (Platinum Edition Readable)
 # ------------------------------------------
 # [戰略目標]
 # 鎖定回測績效最高 (+14490%) 的「鉑金 16 支候選池」。
 #
-# [核心配置]
-# 1. 核心 (80%): BTC + ETH (SMA 140)
-# 2. 衛星 (20%): 冠軍輪動 (Platinum 16)
-#    - 名單: SOL, AVAX, BNB, DOGE, SHIB, RNDR, INJ, SUI, ADA, 
-#           TRX, XLM, BCH, ZEC, LTC, ETC, MATIC
-#    - 邏輯: 站上 SMA 60 + 20日漲幅最強
-#    - 換倉: 挑戰者動能 > 現任 + 15% (防抖動)
+# [優化說明]
+# 1. 訊息文字全面中文化與直覺化 (人話版)。
+# 2. 動能排行榜增加狀態註解與 BTC 熊市警語。
 #
 # [系統功能]
 # 1. LINE Messaging API 推播 (API Push)
 # 2. 支援 GitHub Secrets
-# 3. 修正 Colorama 與 Ticker 問題
 # ==========================================
 
 import os
@@ -33,7 +28,7 @@ warnings.filterwarnings("ignore")
 # 0. 環境檢查與 LINE 設定 (Messaging API)
 # ==========================================
 print("="*50)
-print("🔍 V44 鉑金系統啟動...")
+print("🔍 V44 鉑金系統啟動 (Readable)...")
 
 # 讀取 GitHub Secrets
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN')
@@ -89,7 +84,6 @@ try:
     from colorama import Fore, Style, init
     init(autoreset=True)
 except:
-    # 定義空類別以防 colorama 未安裝或版本問題
     class Fore: RED=GREEN=YELLOW=CYAN=MAGENTA=WHITE=RESET=""
     class Style: BRIGHT=RESET_ALL=""
 
@@ -97,17 +91,13 @@ except:
 # ⚙️ 用戶設定
 # ==========================================
 USER_CONFIG = {
-    'CURRENT_ASSETS': 3000000,  # 目前總資產 (TWD)
-    'TARGET_WEALTH': 20000000,  # 目標金額 (TWD)
-    
-    # [重要] 請填寫您「目前持有」的衛星幣種代號
-    # 範例: 'SOL', 'SHIB' 或 'NONE' (若空倉)
+    'CURRENT_ASSETS': 3000000, 
+    'TARGET_WEALTH': 20000000, 
     'CURRENT_HOLDING_SAT': 'NONE',
-
-    'PENDLE_INTEREST_ACC': 5000 # 累積利息
+    'PENDLE_INTEREST_ACC': 5000
 }
 
-# 衛星候選池 (Platinum 16 - 創造 +14490% 的組合)
+# 衛星候選池 (Platinum 16)
 SATELLITE_POOL = {
     # --- 攻擊型公鏈 ---
     'SOL': 'SOL-USD', 'AVAX': 'AVAX-USD', 'BNB': 'BNB-USD',
@@ -117,7 +107,7 @@ SATELLITE_POOL = {
     'DOGE': 'DOGE-USD', 'SHIB': 'SHIB-USD',
     
     # --- AI / RWA / DeFi ---
-    'RNDR': 'RENDER-USD', # [修正] 使用新代號 RENDER
+    'RNDR': 'RENDER-USD', 
     'INJ': 'INJ-USD',
     
     # --- 補漲型老幣 & L2 ---
@@ -142,7 +132,6 @@ def fetch_data():
     tickers = ['BTC-USD', 'ETH-USD', '^VIX'] + list(SATELLITE_POOL.values())
     start_date = (datetime.now() - timedelta(days=500)).strftime('%Y-%m-%d')
     try:
-        # 使用 auto_adjust=True 修正價格
         data = yf.download(tickers, start=start_date, group_by='ticker', progress=False, auto_adjust=True)
         return data
     except:
@@ -154,11 +143,10 @@ def process_data(raw_data):
     ticker_to_symbol = {'BTC-USD': 'BTC', 'ETH-USD': 'ETH', '^VIX': 'VIX'}
     for k, v in SATELLITE_POOL.items(): ticker_to_symbol[v] = k
     
-    # 處理 MultiIndex
     if isinstance(raw_data.columns, pd.MultiIndex):
         level_0_cols = raw_data.columns.levels[0]
     else:
-        return {} # 格式不符
+        return {} 
 
     for ticker in level_0_cols:
         symbol = ticker_to_symbol.get(ticker)
@@ -166,7 +154,6 @@ def process_data(raw_data):
         
         df = pd.DataFrame()
         try: 
-            # 優先嘗試 Close，若無則嘗試 Adj Close
             col = 'Close' if 'Close' in raw_data[ticker].columns else 'Adj Close'
             df['Close'] = raw_data[ticker][col]
         except: continue
@@ -191,7 +178,7 @@ def process_data(raw_data):
     return data_map
 
 # ==========================================
-# 2. 策略邏輯 (含輪動機制)
+# 2. 策略邏輯 (人話版)
 # ==========================================
 def analyze_market(data_map):
     status = {}
@@ -219,18 +206,18 @@ def analyze_market(data_map):
         target_pct = 0.0
         
         if status['IS_PANIC']:
-            signal = "ESCAPE (0%)"
+            signal = "🌪️ 恐慌避險 (0%)"
             action_short = "清倉"
         elif mayer > STRATEGY_PARAMS['MAYER_GREED']:
-            signal = "TRIM (50%)"
+            signal = "⚠️ 過熱減碼 (50%)"
             action_short = "減倉"
             target_pct = 0.5
         elif price > sma:
-            signal = "BUY (100%)"
+            signal = "🚀 滿倉持有 (100%)"
             action_short = "滿倉"
             target_pct = 1.0
         else:
-            signal = "SELL (0%)"
+            signal = "🛑 空倉觀望 (0%)"
             action_short = "空倉"
             
         status[coin] = {'Price': price, 'SMA': sma, 'Signal': signal, 'ActionShort': action_short, 'TargetPct': target_pct, 'RSI': rsi, 'Mayer': mayer}
@@ -247,7 +234,6 @@ def analyze_market(data_map):
             price = row['Close']
             sma60 = row['SMA_60']
             
-            # 過濾無效數據
             if pd.isna(score) or pd.isna(price) or pd.isna(sma60): continue
             
             is_valid = price > sma60
@@ -269,7 +255,7 @@ def analyze_market(data_map):
         action = "CLEAR"
         action_short = "清倉"
     elif not is_btc_bull:
-        reason = "BTC 熊市，衛星清倉"
+        reason = "BTC 熊市，衛星強制清倉 (大哥濾網)"
         action = "CLEAR"
         action_short = "清倉"
     elif not challenger or not challenger['Valid']:
@@ -375,11 +361,15 @@ def generate_report(status, today_date):
     msg += f"[動能排行榜 (Ret20)]\n"
     for c in sat['Top3']:
         star = "👑" if c['Coin'] == sat['Choice'] else ""
-        valid = "✅" if c['Valid'] else "❌" # ✅=站上SMA60, ❌=跌破SMA60
+        valid = "✅" if c['Valid'] else "❌"
         msg += f"{valid} {c['Coin']}: {c['Score']*100:+.1f}% {star}\n"
     
     msg += "\n(註: ✅=站上SMA60強勢, ❌=跌破SMA60弱勢)\n"
     
+    # 這裡加入 BTC 熊市的特殊提示
+    if status['BTC']['TargetPct'] == 0:
+        msg += "⚠️ (BTC 走弱，大哥不准買，暫停衛星建倉)\n"
+        
     msg += f"\n💡 紀律:\n"
     msg += get_discipline_msg(status)
     msg += f"\n👉 目前持有設定: {USER_CONFIG['CURRENT_HOLDING_SAT']}\n"
