@@ -1,9 +1,11 @@
 # ==========================================
-# Gemini V44 Hyper: Retirement Engine (Messaging API Edition)
+# Gemini V44 Hyper: Retirement Engine (Messaging API + Lazy Summary)
 # ------------------------------------------
-# 這是專為「永續收租期 (Retirement Phase)」設計的執行腳本。
-# 
-# [功能說明]
+# [戰略目標]
+# 專為「永續收租期 (Retirement Phase)」設計。
+# 重點在於保本、現金流管理與提款紀律。
+#
+# [核心功能]
 # 1. 策略: V44 Hyper 防守型 (50% BTC / 40% ETH / 10% SOL)
 # 2. 提款: 自動判斷本月該「賣幣止盈」還是「使用利息/本金」。
 # 3. 通知: 支援 GitHub Secrets (Messaging API) 與操作懶人包。
@@ -24,40 +26,36 @@ warnings.filterwarnings("ignore")
 # 0. 環境檢查與 LINE 設定 (Messaging API)
 # ==========================================
 print("="*50)
-print("🔍 V44 收租系統啟動自我診斷...")
+print("🔍 V44 收租系統啟動 (Messaging API)...")
 
 # 讀取 GitHub Secrets
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN')
 LINE_USER_ID = os.environ.get('LINE_USER_ID')
 
-# 本地測試用 (如果在本地跑，請填入您的 Token/ID，上傳 GitHub 前請清空)
+# 本地測試用 (上傳 GitHub 前請保持為空)
 LOCAL_TOKEN = ''
 LOCAL_USER_ID = ''
 
-if not LINE_CHANNEL_ACCESS_TOKEN and LOCAL_TOKEN:
-    LINE_CHANNEL_ACCESS_TOKEN = LOCAL_TOKEN
-if not LINE_USER_ID and LOCAL_USER_ID:
-    LINE_USER_ID = LOCAL_USER_ID
+FINAL_TOKEN = LINE_CHANNEL_ACCESS_TOKEN if LINE_CHANNEL_ACCESS_TOKEN else LOCAL_TOKEN
+FINAL_USER_ID = LINE_USER_ID if LINE_USER_ID else LOCAL_USER_ID
 
-if LINE_CHANNEL_ACCESS_TOKEN and LINE_USER_ID:
-    print(f"✅ Token 讀取成功: {LINE_CHANNEL_ACCESS_TOKEN[:5]}...")
-    print(f"✅ UserID 讀取成功: {LINE_USER_ID[:5]}...")
+if FINAL_TOKEN and FINAL_USER_ID:
+    print(f"✅ LINE 金鑰讀取成功")
 else:
-    print("❌ 警告：未檢測到 LINE 金鑰！將無法發送通知。")
-    print("   請確認 GitHub Secrets: 'LINE_CHANNEL_ACCESS_TOKEN' 與 'LINE_USER_ID'")
+    print("❌ 警告：未檢測到 LINE 金鑰！(請檢查 GitHub Secrets)")
 
 def send_line_push(msg):
-    if not LINE_CHANNEL_ACCESS_TOKEN or not LINE_USER_ID:
+    if not FINAL_TOKEN or not FINAL_USER_ID:
         print("⚠️ 跳過發送：金鑰不完整")
         return
 
     url = 'https://api.line.me/v2/bot/message/push'
     headers = {
         'Content-Type': 'application/json',
-        'Authorization': f'Bearer {LINE_CHANNEL_ACCESS_TOKEN}'
+        'Authorization': f'Bearer {FINAL_TOKEN}'
     }
     payload = {
-        "to": LINE_USER_ID,
+        "to": FINAL_USER_ID,
         "messages": [{"type": "text", "text": msg}]
     }
     
@@ -75,21 +73,20 @@ def send_line_push(msg):
 try:
     import yfinance as yf
 except ImportError:
-    print("📦 正在安裝必要套件 (yfinance)...")
+    print("📦 安裝 yfinance...")
     import subprocess
     subprocess.check_call([sys.executable, "-m", "pip", "install", "yfinance"])
     import yfinance as yf
 
 try:
-    import colorama
-    from colorama import Fore, Style
-    colorama.init(autoreset=True)
-except ImportError:
+    from colorama import Fore, Style, init
+    init(autoreset=True)
+except:
     class Fore: RED=GREEN=YELLOW=CYAN=MAGENTA=WHITE=RESET=""
-    class Style: BRIGHT=RESET=""
+    class Style: BRIGHT=RESET_ALL=""
 
 # ==========================================
-# ⚙️ 用戶設定 (USER_CONFIG)
+# ⚙️ 用戶設定
 # ==========================================
 USER_CONFIG = {
     'CURRENT_ASSETS': 30000000,   # 目前總資產 (TWD)
@@ -106,37 +103,44 @@ STRATEGY_PARAMS = {
     'MAYER_GREED': 2.4
 }
 
-# 權重配置 (Phase 2 - 防守型)
+# 權重配置 (Phase 2 - 防守型: 降低 SOL 比例)
 ALLOCATION = {'BTC': 0.5, 'ETH': 0.4, 'SOL': 0.1}
 
 # ==========================================
 # 1. 數據引擎
 # ==========================================
 def fetch_data():
-    print(f"\n{Fore.CYAN}📥 正在掃描市場數據 (退休模式)...{Style.RESET}")
+    print(f"\n{Fore.CYAN}📥 正在掃描市場數據 (退休模式)...{Style.RESET_ALL}")
     tickers = ['BTC-USD', 'ETH-USD', 'SOL-USD', '^VIX']
     start_date = (datetime.now() - timedelta(days=500)).strftime('%Y-%m-%d')
     try:
-        data = yf.download(tickers, start=start_date, group_by='ticker', progress=False)
-    except Exception as e:
-        print(f"{Fore.RED}❌ 數據下載失敗: {e}{Style.RESET}")
+        data = yf.download(tickers, start=start_date, group_by='ticker', progress=False, auto_adjust=True)
+        return data
+    except:
         sys.exit()
     return data
 
 def process_data(raw_data):
     data_map = {}
-    tickers_map = {'BTC': 'BTC-USD', 'ETH': 'ETH-USD', 'SOL': 'SOL-USD', 'VIX': '^VIX'}
+    ticker_to_symbol = {'BTC-USD': 'BTC', 'ETH-USD': 'ETH', 'SOL-USD': 'SOL', '^VIX': 'VIX'}
     
-    for symbol, ticker in tickers_map.items():
+    # 處理 MultiIndex
+    if isinstance(raw_data.columns, pd.MultiIndex):
+        level_0_cols = raw_data.columns.levels[0]
+    else:
+        return {} 
+
+    for ticker in level_0_cols:
+        symbol = ticker_to_symbol.get(ticker)
+        if not symbol: continue
+        
         df = pd.DataFrame()
-        try:
-            if ticker in raw_data.columns.levels[0]:
-                df['Close'] = raw_data[ticker]['Close']
-            elif ticker == 'BTC-USD': 
-                 if 'Close' in raw_data.columns: df['Close'] = raw_data['Close']
-        except: pass
-            
-        if df.empty: continue
+        try: 
+            col = 'Close' if 'Close' in raw_data[ticker].columns else 'Adj Close'
+            df['Close'] = raw_data[ticker][col]
+        except: continue
+        
+        if df['Close'].isnull().all(): continue
         df.ffill(inplace=True)
         
         df['SMA_140'] = df['Close'].rolling(window=140).mean()
@@ -146,8 +150,12 @@ def process_data(raw_data):
         data_map[symbol] = df
     return data_map
 
+# ==========================================
+# 2. 策略邏輯 & 提款建議
+# ==========================================
 def analyze_market(data_map):
     status = {}
+    if 'BTC' not in data_map: return {}, None
     today = data_map['BTC'].index[-1]
     
     try: vix = data_map['VIX'].loc[today]['Close']
@@ -209,15 +217,11 @@ def analyze_market(data_map):
     status['MARKET_STATE'] = "BULL" if bull_count >= 2 else "BEAR"
     return status, today
 
-# ==========================================
-# 2. 提款建議模組
-# ==========================================
 def get_withdrawal_advice(status):
     monthly = USER_CONFIG['MONTHLY_WITHDRAW']
-    tent = USER_CONFIG['CASH_TENT_SIZE']
     assets = USER_CONFIG['CURRENT_ASSETS']
     
-    # 計算預估利息收入 (若全現金)
+    # 計算預估利息收入 (假設全現金在 Pendle)
     yearly_interest = assets * 0.8 * USER_CONFIG['PENDLE_INTEREST_RATE'] 
     interest_coverage = (yearly_interest / (monthly * 12)) * 100
     
@@ -240,6 +244,16 @@ def get_withdrawal_advice(status):
         short_advice = "使用利息"
         
     return advice, source, short_advice
+
+def get_discipline_msg(status):
+    msg = ""
+    if status['MARKET_STATE'] == "BULL":
+        msg += "😎 牛市：資產正在增值，請安心提款享受生活。\n"
+        msg += "⚠️ 紀律：勿將生活費加倉，那是貪婪的開始。"
+    else:
+        msg += "🛡️ 熊市：資產暫時縮水是正常的，不要恐慌。\n"
+        msg += "⚠️ 紀律：現金帳篷足夠支撐，遠離盤面。"
+    return msg
 
 # ==========================================
 # 3. 訊息生成 (Report Generator)
@@ -269,7 +283,7 @@ def generate_report(status, today_date):
     vix = status['VIX']
     vix_state = "🔴恐慌!" if status['IS_PANIC'] else "🟢安全"
     msg += f"環境: VIX {vix:.1f} ({vix_state})\n"
-    msg += "-" * 15 + "\n"
+    msg += "-" * 20 + "\n"
     
     # 幣種指令
     icons = {'BTC': '🟠', 'ETH': '🔵', 'SOL': '🟣'}
@@ -277,11 +291,13 @@ def generate_report(status, today_date):
         s = status[coin]
         icon = icons[coin]
         weight_display = int(s['BaseWeight'] * 100)
+        trend_status = "✅" if s['Price'] > s['SMA_140'] else "❌"
+        
         msg += f"{icon} {coin} ({weight_display}%): {s['ActionShort']}\n"
-        msg += f"   ${s['Price']:,.0f} (MA ${s['SMA_140']:,.0f})\n"
+        msg += f"   ${s['Price']:,.0f} (MA ${s['SMA_140']:,.0f}) {trend_status}\n"
         msg += f"   指令: {s['SignalText']}\n"
     
-    msg += "-" * 15 + "\n"
+    msg += "-" * 20 + "\n"
     
     # 提款建議
     advice_text, source, _ = get_withdrawal_advice(status)
@@ -290,57 +306,18 @@ def generate_report(status, today_date):
         msg += "🟢 [本月提款]\n👉 直接賣幣變現 (被動止盈)\n"
     else:
         msg += "🛡️ [本月提款]\n👉 使用 Pendle 利息/現金 (保護本金)\n"
-    
+        
     # 紀律提醒
     msg += f"\n💡 退休紀律:\n"
-    if status['MARKET_STATE'] == "BULL":
-        msg += "牛市請安心提款享受生活。\n勿將生活費加倉，那是貪婪。"
-    else:
-        msg += "熊市資產縮水正常，勿恐慌。\n現金帳篷足夠支撐，遠離盤面。"
-        
+    msg += get_discipline_msg(status)
+    
     return msg
 
 # ==========================================
 # 4. 戰情儀表板 (Console Preview)
 # ==========================================
-def print_dashboard(status, today_date):
-    assets = USER_CONFIG['CURRENT_ASSETS']
-    tent = USER_CONFIG['CASH_TENT_SIZE']
-    monthly = USER_CONFIG['MONTHLY_WITHDRAW']
-    
-    print("\n" + "="*60)
-    print(f"{Fore.CYAN}🏰 V44 Hyper 收租版戰情室 (Retirement Mode){Style.RESET}")
-    print(f"📅 日期: {today_date.strftime('%Y-%m-%d')}")
-    print(f"💰 總資產: ${assets:,.0f}")
-    print(f"⛺ 現金帳篷: ${tent:,.0f} (安全水位)")
-    print(f"💸 每月剛需: ${monthly:,.0f}")
-    print("="*60)
-    
-    vix = status['VIX']
-    vix_str = f"{Fore.RED}{vix:.2f} (恐慌!){Style.RESET}" if status['IS_PANIC'] else f"{Fore.GREEN}{vix:.2f} (安全){Style.RESET}"
-    print(f"🌍 市場氣象 (VIX): {vix_str}")
-    print("-" * 60)
-    
-    print(f"{Fore.YELLOW}⚔️ 投資組合 (防守型配置) 操作指令:{Style.RESET}")
-    for coin in ['BTC', 'ETH', 'SOL']:
-        s = status[coin]
-        if s['Action'] == 1: color = Fore.GREEN
-        elif s['Action'] == -1: color = Fore.RED
-        else: color = Fore.YELLOW
-        
-        print(f"💎 {coin:<3} ({int(ALLOCATION[coin]*100)}%): {Fore.WHITE}${s['Price']:,.2f}{Style.RESET}")
-        print(f"   • SMA140: ${s['SMA_140']:,.0f}")
-        print(f"   • Mayer:  {s['Mayer']:.2f}")
-        print(f"   👉 指令: {Style.BRIGHT}{color}{s['SignalText']}{Style.RESET}")
-        print("-" * 20)
-
-    # 提款建議區塊
-    advice, source, _ = get_withdrawal_advice(status)
-    print(f"\n{Fore.MAGENTA}🛡️ 雙油箱提款指引:{Style.RESET}")
-    print(advice)
-    print(f"👉 資金來源: {Fore.CYAN}{source}{Style.RESET}")
-    
-    print("="*60 + "\n")
+def print_dashboard_preview(msg):
+    print("\n" + msg)
 
 # ==========================================
 # 主程式
@@ -351,15 +328,9 @@ if __name__ == "__main__":
         processed = process_data(raw)
         if processed and 'BTC' in processed:
             stat, today = analyze_market(processed)
-            
-            # 1. 儀表板
-            print_dashboard(stat, today)
-            
-            # 2. LINE 通知 (Messaging API)
             line_msg = generate_report(stat, today)
-            print("--- LINE 預覽 ---\n" + line_msg) # 本機預覽
+            # print(line_msg) # 本機預覽
             send_line_push(line_msg)
-            
         else:
             print("❌ 無法獲取數據")
     except Exception as e:
