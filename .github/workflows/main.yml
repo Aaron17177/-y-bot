@@ -2,8 +2,8 @@ name: Gemini V44 Hyper Daily Run
 
 on:
   schedule:
-    - cron: '0 0 * * *'
-  workflow_dispatch:
+    - cron: '0 0 * * *' # 每天 UTC 0:00 (台灣時間早上 8:00) 執行
+  workflow_dispatch: # 允許手動點擊執行
 
 jobs:
   build:
@@ -21,11 +21,14 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
+        # 如果您的 requirements.txt 檔案名稱不同，請在此修改
+        # 這裡直接安裝腳本需要的套件，避免 requirements.txt 不存在的錯誤
+        pip install yfinance pandas numpy requests colorama
 
     - name: Run Trading Bot
       env:
         # 這裡就是接通 Secrets 的關鍵，縮排必須完全正確
         LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
         LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
-      run: python Gemini V44 Hyper: Accumulation Engine (Platinum Edition)
+      # ⚠️ 修正點：這裡必須填寫您上傳的 .py 檔案名稱
+      run: python v44_hyper_platinum.py
