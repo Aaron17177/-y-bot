@@ -31,4 +31,4 @@ jobs:
         LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
         LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
       # ⚠️ 修正點：這裡必須填寫您上傳的 .py 檔案名稱
-      run: python v44_hyper_platinum.py
+      run: python V44 Super Nova (SN-Sentinel).py
