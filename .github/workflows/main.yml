@@ -1,34 +1,40 @@
-name: Gemini V44 Super Nova (SN-Sentinel) Run
+name: V44 Master Baseline Daily Check
 
+# 設定執行觸發條件
 on:
   schedule:
-    - cron: '0 0 * * *' # 每天 UTC 0:00 (台灣時間早上 8:00) 執行
-  workflow_dispatch: # 允許手動點擊執行
+    # 每天 UTC 00:00 執行 (約台灣時間早上 08:00)
+    - cron: '0 0 * * *'
+  # 允許您在 GitHub 網頁介面手動點擊 "Run workflow" 立即執行
+  workflow_dispatch:
 
 jobs:
-  build:
+  run-bot:
+    # 使用最新的 Ubuntu 環境
     runs-on: ubuntu-latest
-
+    
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
+      # 1. 檢出您的儲存庫代碼
+      - name: Checkout Repository
+        uses: actions/checkout@v3
 
-    - name: Set up Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: '3.10'
+      # 2. 設定 Python 環境
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        # 如果您的 requirements.txt 檔案名稱不同，請在此修改
-        # 這裡直接安裝腳本需要的套件，避免 requirements.txt 不存在的錯誤
-        pip install yfinance pandas numpy requests colorama
+      # 3. 安裝所有必要的 Python 套件 (特別包含 scipy)
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install yfinance pandas numpy requests scipy
 
-    - name: Run Trading Bot
-      env:
-        # 這裡就是接通 Secrets 的關鍵，縮排必須完全正確
-        LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
-        LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
-      # ⚠️ 修正點：這裡必須填寫您上傳的 .py 檔案名稱
-      run: python "V44 Super Nova (SN-Sentinel).py"
+      # 4. 執行 V44 基準版策略腳本
+      - name: Run V44 Strategy
+        env:
+          # 從您的 GitHub Secrets 讀取 LINE API 金鑰
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+        # ⚠️ 關鍵：因為檔名包含空格與括號，執行指令必須使用雙引號包裹
+        run: python "V44 Super Nova (SN-Sentinel).py"
