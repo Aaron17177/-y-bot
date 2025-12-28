@@ -6,3 +6,8 @@ gymnasium
 shimmy
 requests
 matplotlib
+yfinance
+pandas
+numpy
+requests
+scipy
