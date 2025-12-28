@@ -5,9 +5,8 @@
 # 1. 核心 (80%): BTC/ETH 動態權重 (60/20 或 40/40)。
 # 2. 衛星 (20%): Hyper Attack 雙星輪動 (10% + 10%)。
 # 3. 裝甲 (Threshold): 5% 調倉門檻，對抗 0.2% 摩擦成本。
-# 4. 執行 (Execution): T+1 延遲邏輯之實戰信號。
-# 5. 排行榜 (Ranking): 新增動能排行榜於 LINE 訊息。
-# 6. 提醒 (Maintenance): 半年更新提醒 (預設 2026-06-28)。
+# 4. 容錯 (Resilience): 加入單幣下載失敗補救機制 (針對 SUI 等)。
+# 5. 提醒 (Maintenance): 半年更新提醒 (預設 2026-06-28)。
 # ==========================================
 
 import os
@@ -34,14 +33,8 @@ def send_line_push(msg):
         return
 
     url = 'https://api.line.me/v2/bot/message/push'
-    headers = {
-        'Content-Type': 'application/json',
-        'Authorization': f'Bearer {LINE_TOKEN}'
-    }
-    payload = {
-        "to": LINE_UID,
-        "messages": [{"type": "text", "text": msg}]
-    }
+    headers = {'Content-Type': 'application/json', 'Authorization': f'Bearer {LINE_TOKEN}'}
+    payload = {"to": LINE_UID, "messages": [{"type": "text", "text": msg}]}
     
     try:
         res = requests.post(url, headers=headers, json=payload)
@@ -61,19 +54,19 @@ except ImportError:
     import yfinance as yf
 
 # ==========================================
-# ⚙️ 實戰帳戶現況 (請在 GitHub 每日或交易後更新此區)
+# ⚙️ 實戰帳戶現況 (請每日在此更新數據)
 # ==========================================
 USER_ACCOUNT = {
-    'TOTAL_EQUITY_USDT': 93750.0,    # 👈 1. 目前總資產 (USDT 估值)
+    'TOTAL_EQUITY_USDT': 93750.0,    # 👈 目前總資產 (USDT)
     
-    'CURRENT_BTC_W': 0.0,           # 2. 目前 BTC 佔比 (0.0 ~ 1.0)
-    'CURRENT_ETH_W': 0.0,           # 3. 目前 ETH 佔比
+    'CURRENT_BTC_W': 0.0,           # 目前 BTC 佔比 (0.0~1.0)
+    'CURRENT_ETH_W': 0.0,           # 目前 ETH 佔比
     
-    'CURRENT_SAT_1_SYM': 'NONE',    # 4. 目前持有的衛星 1 代號 (如 'SOL')
-    'CURRENT_SAT_1_W': 0.0,         # 5. 目前衛星 1 佔比
+    'CURRENT_SAT_1_SYM': 'NONE',    # 目前持有的衛星 1 代號
+    'CURRENT_SAT_1_W': 0.0,         # 目前衛星 1 佔比
     
-    'CURRENT_SAT_2_SYM': 'NONE',    # 6. 目前持有的衛星 2 代號
-    'CURRENT_SAT_2_W': 0.0          # 7. 目前衛星 2 佔比
+    'CURRENT_SAT_2_SYM': 'NONE',    # 目前持有的衛星 2 代號
+    'CURRENT_SAT_2_W': 0.0          # 目前衛星 2 佔比
 }
 
 # 基準 15 支精英候選池 (Lean 15)
@@ -84,9 +77,8 @@ SATELLITE_POOL = {
     'LEGACY': ['TRX-USD', 'XLM-USD', 'BCH-USD', 'LTC-USD', 'ZEC-USD']
 }
 
-# 參數設定
-REBALANCE_THRESHOLD = 0.05  # 5% 調倉門檻
-UPDATE_DEADLINE = datetime(2026, 6, 28) # 半年後提醒日期
+REBALANCE_THRESHOLD = 0.05  
+UPDATE_DEADLINE = datetime(2026, 6, 28) 
 
 # ==========================================
 # 1. 策略分析引擎 (Master Baseline Logic)
@@ -95,25 +87,48 @@ def analyze_market():
     all_sats = [t for sub in SATELLITE_POOL.values() for t in sub]
     tickers = ['BTC-USD', 'ETH-USD', '^VIX'] + all_sats
     
-    print(f"📥 正在抓取數據...")
-    data = yf.download(tickers, start=(datetime.now() - timedelta(days=300)).strftime('%Y-%m-%d'), group_by='ticker', progress=False, auto_adjust=True)
+    print(f"📥 正在執行批次數據抓取...")
+    start_str = (datetime.now() - timedelta(days=300)).strftime('%Y-%m-%d')
+    data = yf.download(tickers, start=start_str, group_by='ticker', progress=False, auto_adjust=True)
     
     data_map = {}
+    missing_coins = []
     ticker_to_sector = {t.split('-')[0]: s for s, ts in SATELLITE_POOL.items() for t in ts}
     ticker_to_sector['PEPE24478'] = 'MEME'
 
-    for ticker in data.columns.levels[0]:
-        symbol = ticker.split('-')[0] if ticker != '^VIX' else 'VIX'
+    # --- 數據解析與單幣補救機制 ---
+    for symbol_raw in tickers:
+        symbol = symbol_raw.split('-')[0] if symbol_raw != '^VIX' else 'VIX'
+        df = pd.DataFrame()
+        
         try:
-            df = data[ticker].copy().ffill()
-            if df.empty or len(df) < 100: continue
-            df['SMA_140'] = df['Close'].rolling(140).mean()
+            if isinstance(data.columns, pd.MultiIndex) and symbol_raw in data.columns.levels[0]:
+                df = data[symbol_raw].copy().ffill()
+            elif symbol_raw == 'BTC-USD' and 'Close' in data.columns:
+                df = data.copy().ffill()
+        except:
+            pass
+            
+        # [核心修復] 如果批次下載沒抓到，嘗試單獨下載該幣
+        if df.empty or len(df) < 100:
+            print(f"⚠️ {symbol_raw} 下載失敗，啟動單幣補救措施...")
+            try:
+                # 稍微加長一點日期範圍以利 Yahoo 緩存命中
+                alt_start = (datetime.now() - timedelta(days=310)).strftime('%Y-%m-%d')
+                df = yf.download(symbol_raw, start=alt_start, progress=False, auto_adjust=True).ffill()
+            except:
+                pass
+        
+        if not df.empty and len(df) >= 100:
             df['SMA_60'] = df['Close'].rolling(60).mean()
+            df['SMA_140'] = df['Close'].rolling(140).mean()
             df['Ret_20'] = df['Close'].pct_change(20)
             data_map[symbol] = df
-        except: continue
+        elif symbol != 'VIX':
+            missing_coins.append(symbol)
 
-    if 'BTC' not in data_map: raise Exception("數據庫缺失關鍵 BTC 指標")
+    if 'BTC' not in data_map:
+        raise Exception("❌ 無法獲取 BTC 核心數據，請檢查 GitHub 網路或 Yahoo API 狀態。")
 
     today = data_map['BTC'].index[-1]
     vix = data_map['VIX'].loc[today]['Close'] if 'VIX' in data_map else 20
@@ -126,13 +141,13 @@ def analyze_market():
     for sym, sec in ticker_to_sector.items():
         if sym not in data_map: continue
         r = data_map[sym].loc[today]
+        # 濾網：站上 SMA 60 且 20日漲幅 > BTC
         is_valid = r['Close'] > r['SMA_60'] and r['Ret_20'] > row_btc['Ret_20']
         candidates.append({'sym': sym, 'score': r['Ret_20'], 'sector': sec, 'valid': is_valid})
     
-    # 排序動能
     candidates.sort(key=lambda x: x['score'], reverse=True)
     
-    # 挑選雙星
+    # 挑選雙星 (軟性板塊懲罰)
     top_targets = []
     if candidates:
         valid_cands = [c for c in candidates if c['valid']]
@@ -143,23 +158,31 @@ def analyze_market():
                 challenger = sorted([{**c, 'adj': c['score']*0.8 if c['sector']==f_sec else c['score']} for c in valid_cands[1:]], key=lambda x: x['adj'], reverse=True)[0]
                 top_targets.append(challenger)
 
-    # 計算權重
+    # 計算目標比例
     tw = {'BTC': 0.0, 'ETH': 0.0, 'SAT1': 0.0, 'SAT2': 0.0}
     ss = {'SAT1': 'NONE', 'SAT2': 'NONE'}
-    if vix < 30 and bull_btc:
-        sat_alloc = 0.20; core_alloc = 0.80
-        if row_eth['Ret_20'] > row_btc['Ret_20']: tw['BTC'], tw['ETH'] = core_alloc*0.5, core_alloc*0.5
-        else: tw['BTC'], tw['ETH'] = core_alloc*0.75, core_alloc*0.25
-        for i, t in enumerate(top_targets):
-            tw[f'SAT{i+1}'] = sat_alloc/2; ss[f'SAT{i+1}'] = t['sym']
 
-    return tw, ss, vix, bull_btc, candidates[:5], today
+    if vix < 30 and bull_btc:
+        sat_alloc = 0.20
+        core_alloc = 0.80
+        # Sentinel 核心切換
+        if row_eth['Ret_20'] > row_btc['Ret_20'] and row_eth['Close'] > row_eth['SMA_140']:
+            tw['BTC'], tw['ETH'] = core_alloc * 0.5, core_alloc * 0.5
+        else:
+            tw['BTC'], tw['ETH'] = core_alloc * 0.75, core_alloc * 0.25
+        
+        for i, t in enumerate(top_targets):
+            key = f'SAT{i+1}'
+            tw[key] = sat_alloc / 2
+            ss[key] = t['sym']
+
+    return tw, ss, vix, bull_btc, candidates[:5], missing_coins, today
 
 # ==========================================
-# 2. 戰報生成 (加入排行榜)
+# 2. 戰報生成 (加入排行榜與數據缺失提示)
 # ==========================================
 def generate_report():
-    tw, ss, vix, is_bull, ranking, dt = analyze_market()
+    tw, ss, vix, is_bull, ranking, missing, dt = analyze_market()
     total_eq = USER_ACCOUNT['TOTAL_EQUITY_USDT']
     
     msg = f"🛡️ V44 Master Baseline 戰報\n"
@@ -176,8 +199,11 @@ def generate_report():
 
     for name, curr, target, held_sym in items:
         display_name = name
-        target_sym = ss['SAT1'] if '1' in name else ss['SAT2'] if '2' in name else 'NONE'
-        if '衛星' in name: display_name = f"衛星: {target_sym}"
+        target_sym = 'NONE'
+        if '衛星' in name:
+            slot_key = 'SAT1' if '1' in name else 'SAT2'
+            target_sym = ss[slot_key]
+            display_name = f"衛星: {target_sym}"
         
         diff = target - curr
         action = "✅ 續抱"
@@ -189,17 +215,22 @@ def generate_report():
             
         msg += f"{display_name}\n"
         msg += f"   目標: {target*100:.1f}% | 動作: {action}\n"
-        if action != "✅ 續抱": msg += f"   👉 預計變動: ${diff * total_eq:>+8.1f} USDT\n"
+        if action != "✅ 續抱":
+            msg += f"   👉 預計變動: ${diff * total_eq:>+8.1f} USDT\n"
 
     msg += "-" * 22 + "\n"
     
-    # --- 動能排行榜區塊 ---
+    # 動能排行榜
     msg += f"📊 [動能排行榜 (Ret20)]\n"
     for c in ranking:
         star = "👑" if c['sym'] in [ss['SAT1'], ss['SAT2']] else ""
         valid = "✅" if c['valid'] else "❌"
         msg += f"{valid} {c['sym']}: {c['score']*100:+.1f}% {star}\n"
-    msg += "(註: ✅=站上SMA60且贏過大盤)\n"
+    
+    # 數據缺失警告
+    if missing:
+        msg += f"\n⚠️ 注意：以下幣種數據下載失敗，暫無排名資訊：{', '.join(missing)}\n"
+    
     msg += "-" * 22 + "\n"
     
     # 半年提醒
@@ -211,8 +242,8 @@ def generate_report():
 
 if __name__ == "__main__":
     try:
-        report = generate_report()
-        send_line_push(report)
+        report_text = generate_report()
+        send_line_push(report_text)
     except Exception as e:
         err_msg = f"❌ 執行錯誤: {str(e)}"
         print(err_msg)
