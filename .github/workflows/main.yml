@@ -1,4 +1,4 @@
-name: V44 Master Baseline Daily Check
+name: V54 Shield
 
 # 設定執行觸發條件
 on:
@@ -37,4 +37,4 @@ jobs:
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
         # ⚠️ 關鍵：因為檔名包含空格與括號，執行指令必須使用雙引號包裹
-        run: python "V44 Super Nova (SN-Sentinel).py"
+        run: python "Gemini V54 Shield.py"
