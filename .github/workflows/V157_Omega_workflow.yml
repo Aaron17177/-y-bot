@@ -44,6 +44,9 @@ jobs:
           BITGET_API_KEY: ${{ secrets.BITGET_API_KEY }}
           BITGET_SECRET_KEY: ${{ secrets.BITGET_SECRET_KEY }}
           BITGET_PASSWORD: ${{ secrets.BITGET_PASSWORD }}
+          # 台股 API
+          TWSTOCKS_API_KEY: ${{ secrets.TWSTOCKS_API_KEY }}
+          TWSTOCKS_SECRET_KEY: ${{ secrets.TWSTOCKS_SECRET_KEY }}
         run: python "V157_Omega.py"
 
       # 5. 自動存檔 (將更新後的 state.json 推送回 GitHub)
