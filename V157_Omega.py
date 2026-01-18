@@ -13,8 +13,14 @@ import pytz
 # ==========================================
 LINE_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
 LINE_USER_ID = os.getenv('LINE_USER_ID')
+
+# 幣安 (Binance) API
 BN_KEY = os.getenv('BINANCE_API_KEY')
 BN_SECRET = os.getenv('BINANCE_SECRET_KEY')
+
+# 台股 (TW Stocks) API [新增]
+TW_KEY = os.getenv('TWSTOCKS_API_KEY')
+TW_SECRET = os.getenv('TWSTOCKS_SECRET_KEY')
 
 # 初始化幣安客戶端 (只讀權限)
 exchange = None
@@ -56,6 +62,7 @@ STRATEGIC_POOL = {
         '1519.TW', '1503.TW', '2317.TW'
     ]
 }
+
 ALL_TICKERS = list(set([t for sub in STRATEGIC_POOL.values() for t in sub])) + ['^GSPC']
 
 # ==========================================
@@ -66,10 +73,22 @@ def send_line_push(message):
     if not LINE_ACCESS_TOKEN or not LINE_USER_ID:
         print("❌ LINE 配置缺失，訊息內容：\n", message)
         return
+    
     url = "https://api.line.me/v2/bot/message/push"
-    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {LINE_ACCESS_TOKEN}"}
-    payload = {"to": LINE_USER_ID, "messages": [{"type": "text", "text": message}]}
-    requests.post(url, headers=headers, json=payload)
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {LINE_ACCESS_TOKEN}"
+    }
+    payload = {
+        "to": LINE_USER_ID,
+        "messages": [{"type": "text", "text": message}]
+    }
+    try:
+        response = requests.post(url, headers=headers, json=payload)
+        if response.status_code != 200:
+            print(f"❌ LINE 發送失敗: {response.text}")
+    except Exception as e:
+        print(f"❌ LINE 連線異常: {e}")
 
 def get_binance_symbol(yf_ticker):
     if yf_ticker in YF_TO_BINANCE: base = YF_TO_BINANCE[yf_ticker]
@@ -78,6 +97,8 @@ def get_binance_symbol(yf_ticker):
 
 def sync_holdings_with_binance(state):
     """自動偵測幣安持倉並更新追蹤帳本"""
+    # 這裡未來可以加入 if TW_KEY: sync_with_tw_broker()... 的邏輯
+    
     if not exchange: return state, "⚠️ 幣安 API 未設定，僅能手動同步持倉\n"
     try:
         balance = exchange.fetch_balance()
@@ -107,7 +128,7 @@ def sync_holdings_with_binance(state):
             if "-USD" in ticker and ticker not in api_holdings:
                 sync_log += f"➖ 偵測清倉: {ticker}\n"
         
-        # C. 保留非 Crypto 標的
+        # C. 保留非 Crypto 標的 (美股/台股)
         for ticker, info in state['held_assets'].items():
             if "-USD" not in ticker: new_assets[ticker] = info
         
@@ -117,7 +138,7 @@ def sync_holdings_with_binance(state):
     except Exception as e: return state, f"❌ 同步異常: {str(e)}\n"
 
 # ==========================================
-# 4. 主決策引擎 (倉位建議優化版)
+# 4. 主決策引擎
 # ==========================================
 def main():
     tz = pytz.timezone('Asia/Taipei')
@@ -222,15 +243,14 @@ def main():
     # D. 買入掃描 (Top 3)
     candidates = []
     
-    # 策略限制：最多持有 3 檔。計算剩餘名額
+    # 策略限制：最多持有 3 檔
     slots_left = 3 - current_positions_count
     
-    # 如果有空位且環境允許
     if slots_left > 0 and (spy_bull or btc_bull):
         for t in [x for x in prices.columns if x != '^GSPC']:
             if t in state['held_assets']: continue
             
-            # 分市場過濾 (幣圈看幣圈，美股看美股)
+            # 分市場過濾
             is_crypto = "-USD" in t
             if is_crypto and not btc_bull: continue
             if not is_crypto and not spy_bull: continue
@@ -248,8 +268,7 @@ def main():
         if candidates:
             report += "➖➖➖➖➖➖➖➖➖➖\n"
             report += f"🚀 【強勢進場建議】(剩 {slots_left} 席)\n"
-            # 建議倉位計算
-            pos_size_pct = 33.3 # V157 固定權重
+            pos_size_pct = 33.3 
             
             for i, (sym, sc, p) in enumerate(candidates[:slots_left]):
                 stop_loss = p * 0.85
