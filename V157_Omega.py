@@ -7,7 +7,8 @@ import requests
 import ccxt
 import base64
 import time
-from datetime import datetime, timedelta
+import gc # 引入垃圾回收機制
+from datetime import datetime
 import pytz
 
 # 嘗試匯入 shioaji
@@ -27,42 +28,26 @@ BG_KEY = os.getenv('BITGET_API_KEY')
 BG_SECRET = os.getenv('BITGET_SECRET_KEY')
 BG_PASS = os.getenv('BITGET_PASSWORD')
 
-# 幣安 (備用)
-BN_KEY = os.getenv('BINANCE_API_KEY')
-BN_SECRET = os.getenv('BINANCE_SECRET_KEY')
-
 # 永豐金
 SJ_UID = os.getenv('TWSTOCKS_API_KEY')
 SJ_PASS = os.getenv('TWSTOCKS_SECRET_KEY')
 SJ_CERT_B64 = os.getenv('SHIOAJI_PFX_BASE64')
 
-# 回測參數 (用於即時計算夏普值)
-INITIAL_TWD = 3000000.0
-USD_TWD_RATE = 32.5
-CAPITAL_USDT = INITIAL_TWD / USD_TWD_RATE
-START_DATE = '2020-11-01'
-CASH_APY = 0.045
-DAILY_INTEREST = (1 + CASH_APY)**(1/365) - 1
-SLIPPAGE_FEES = {'CRYPTO': 0.007, 'US_STOCK': 0.002, 'TW_STOCK': 0.004} # 綜合摩擦成本
-
 # 初始化 Crypto 客戶端
 exchange = None
 crypto_name = "Manual"
-try:
-    if BG_KEY and BG_SECRET and BG_PASS:
+if BG_KEY and BG_SECRET and BG_PASS:
+    try:
         exchange = ccxt.bitget({'apiKey': BG_KEY, 'secret': BG_SECRET, 'password': BG_PASS})
         crypto_name = "Bitget"
-    elif BN_KEY and BN_SECRET:
-        exchange = ccxt.binance({'apiKey': BN_KEY, 'secret': BN_SECRET})
-        crypto_name = "Binance"
-except: pass
+    except: pass
 
 # 幣種對照
 BITGET_MAP = {
     'PEPE': 'PEPE24478-USD', 'RNDR': 'RENDER-USD', 'RENDER': 'RENDER-USD',
     'BONK': 'BONK-USD', 'WIF': 'WIF-USD', 'FLOKI': 'FLOKI-USD', 'SHIB': 'SHIB-USD'
 }
-REV_BITGET_MAP = {v: k for k, v in BITGET_TO_YF.items()} if 'BITGET_TO_YF' in locals() else {v: k for k, v in BITGET_MAP.items()}
+REV_BITGET_MAP = {v: k for k, v in BITGET_MAP.items()}
 
 # ==========================================
 # 2. V157 完整戰力池 (74檔)
@@ -88,7 +73,7 @@ STRATEGIC_POOL = {
 ALL_TICKERS = list(set([t for sub in STRATEGIC_POOL.values() for t in sub])) + ['^GSPC', '^TWII']
 
 # ==========================================
-# 3. 模組功能 (通訊 & API 同步)
+# 3. 模組功能
 # ==========================================
 def send_line(msg):
     if not LINE_TOKEN or not LINE_USER: return
@@ -117,7 +102,6 @@ def sync_crypto(state):
         log = ""
         new_assets = state['held_assets'].copy()
         
-        # A. 新增
         for ticker, amt in api_holdings.items():
             if ticker not in new_assets:
                 try:
@@ -128,7 +112,6 @@ def sync_crypto(state):
                 new_assets[ticker] = {"entry": entry, "high": entry}
                 log += f"➕ {crypto_name} 新增: {ticker}\n"
         
-        # B. 移除
         for t in list(new_assets.keys()):
             if "-USD" in t and t not in api_holdings:
                 del new_assets[t]
@@ -183,60 +166,22 @@ def sync_tw_stock(state):
         return state, f"❌ 台股失敗: {str(e)[:20]}...\n"
 
 # ==========================================
-# 4. 歷史審計引擎 (這是讓程式變長的原因)
-# ==========================================
-def calculate_sim_impact(price, action):
-    # 簡易模擬回測用的固定滑價
-    return price * 1.005 if action == 'buy' else price * 0.995
-
-def run_historical_audit(prices, opens):
-    """
-    這段程式碼負責重跑過去 5 年的數據，
-    為了計算出您最在意的『夏普值』與『2025 績效』。
-    """
-    ma20 = prices.rolling(20).mean()
-    ma50 = prices.rolling(50).mean()
-    # 策略變數
-    cash = CAPITAL_USDT
-    portfolio = {t: 0.0 for t in ALL_TICKERS if t not in ['^GSPC', '^TWII']}
-    equity_curve = []
-    
-    # 簡化版回測 (只為了算指標)
-    # 從 2024-01-01 開始跑就好，節省時間但足夠算 2025
-    start_idx = prices.index.searchsorted(pd.Timestamp('2024-01-01'))
-    
-    for i in range(start_idx, len(prices)):
-        date = prices.index[i]
-        # 資產計算
-        stock_val = sum([portfolio[t] * prices.loc[date, t] for t in portfolio if portfolio[t]>0])
-        total = cash + stock_val
-        equity_curve.append(total)
-        
-        # 簡單模擬 V157 買賣 (MA50)
-        # 這裡不需過度複雜，只需大概模擬出績效曲線即可
-        # ... (省略過於冗長的逐日交易細節，改用權重模擬) ...
-    
-    # 這裡我們直接抓取 benchmark 作為參考，或是簡單計算
-    # 為了不讓程式碼過長到無法維護，我們用當前市場數據來估算夏普
-    # 實戰中，我們更關心「現在該做什麼」
-    return [], 0, 0 # 暫時返回空，由下方 Real-time 計算接手
-
-# ==========================================
-# 5. 主決策引擎 (實戰核心)
+# 5. 主決策引擎 (實戰核心 - 輕量穩定版)
 # ==========================================
 def main():
     tz = pytz.timezone('Asia/Taipei')
     now = datetime.now(tz)
     print(f"🚀 V157 Omega 啟動...")
     
-    # A. 抓取數據 (長週期，為了指標與審計)
+    # A. 抓取數據 (縮短週期並關閉多線程以防崩潰)
     try:
-        data = yf.download(ALL_TICKERS, period='400d', progress=False, auto_adjust=True)
+        data = yf.download(ALL_TICKERS, period='252d', progress=False, auto_adjust=True, threads=False)
         prices = data['Close'].ffill()
         
         # V157 核心指標
         ma20 = prices.rolling(20).mean()
         ma50 = prices.rolling(50).mean() # 季線
+        
         ma200_spy = prices['^GSPC'].rolling(200).mean()
         
         # 台股季線
@@ -246,9 +191,16 @@ def main():
         # 幣圈牛熊
         btc_ma100 = prices['BTC-USD'].rolling(100).mean() if 'BTC-USD' in prices else ma200_spy
         
-        mom_20 = prices.pct_change(20)
-    except:
-        send_line("❌ 數據抓取失敗"); return
+        # 動能計算 (使用 fill_method=None 避免警告與錯誤)
+        mom_20 = prices.pct_change(20, fill_method=None)
+        
+        # 手動清理記憶體
+        del data
+        gc.collect()
+        
+    except Exception as e:
+        print(f"Error: {e}")
+        send_line("❌ 數據抓取失敗: 記憶體溢出或網絡錯誤"); return
 
     # B. 狀態與同步
     state_file = 'state.json'
@@ -259,17 +211,9 @@ def main():
     state, c_log = sync_crypto(state)
     state, t_log = sync_tw_stock(state)
     
-    # C. 實時績效計算 (取代冗長的歷史回測)
-    # 我們計算最近 250 天的「模擬 V157」績效來給出夏普值
-    # 假設我們一直持有當前的前 3 強
-    sim_ret = prices.pct_change().mean(axis=1) * 252 # 簡易估算
-    # 這裡直接用 SPY 作為基準夏普參考，避免過度運算
-    spy_ret = prices['^GSPC'].pct_change().dropna()
+    # C. 簡易大盤夏普 (只算 SPY，避免全體計算崩潰)
+    spy_ret = prices['^GSPC'].pct_change(fill_method=None).dropna()
     sharpe = (spy_ret.mean() / spy_ret.std()) * np.sqrt(252)
-    
-    # 計算 2025 年至今的 SPY 報酬 (作為大盤基準)
-    y2025_start = prices['^GSPC'].loc['2025-01-01':].iloc[0] if '2025-01-01' in prices.index else prices['^GSPC'].iloc[0]
-    y2025_ret = (prices['^GSPC'].iloc[-1] / y2025_start - 1) * 100
     
     # D. 報告生成
     report = f"🔱 V157 Omega 戰情室\n📅 {now.strftime('%Y-%m-%d %H:%M')}\n"
@@ -351,8 +295,7 @@ def main():
         cands.sort(key=lambda x: x[1], reverse=True)
         if cands:
             report += f"\n🚀 【進場建議】(剩 {slots} 席)\n"
-            for i in range(min(slots, 3)):
-                sym, sc, p, r = cands[i]
+            for i, (sym, sc, p, r) in enumerate(cands[:slots]):
                 stop = p * 0.85
                 report += f"💎 {sym} {r}\n"
                 report += f"   建議權重: 33% | 價:{p:.2f}\n"
