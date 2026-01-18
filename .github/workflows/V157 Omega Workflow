@@ -1,4 +1,4 @@
-name: V157＿Omega
+name: V157_Omega
 
 on:
   schedule:
@@ -42,7 +42,7 @@ jobs:
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
           BINANCE_API_KEY: ${{ secrets.BINANCE_API_KEY }}
           BINANCE_SECRET_KEY: ${{ secrets.BINANCE_SECRET_KEY }}
-        run: python omega_bot.py
+        run: V157_Omega.py
 
       # 5. 自動存檔 (將更新後的 state.json 推送回 GitHub)
       - name: Commit and Push State Change
