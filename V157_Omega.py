@@ -11,10 +11,11 @@ from datetime import datetime
 import pytz
 
 # 嘗試匯入 shioaji
+sj = None
 try:
     import shioaji as sj
 except ImportError:
-    sj = None
+    pass
 
 # ==========================================
 # 1. 核心配置
@@ -30,31 +31,29 @@ BG_PASS = os.getenv('BITGET_PASSWORD')
 BN_KEY = os.getenv('BINANCE_API_KEY')
 BN_SECRET = os.getenv('BINANCE_SECRET_KEY')
 
-# 台股 Keys
-SJ_UID = os.getenv('TWSTOCKS_API_KEY')
-SJ_PASS = os.getenv('TWSTOCKS_SECRET_KEY')
-SJ_CERT_B64 = os.getenv('SHIOAJI_PFX_BASE64')
+# 台股 Keys (確保去除前後空格)
+SJ_UID = os.getenv('TWSTOCKS_API_KEY', '').strip()
+SJ_PASS = os.getenv('TWSTOCKS_SECRET_KEY', '').strip()
+SJ_CERT_B64 = os.getenv('SHIOAJI_PFX_BASE64', '').strip()
 
 # 初始化 Bitget (優先)
 exchange = None
 crypto_name = "Manual"
-if BG_KEY and BG_SECRET and BG_PASS:
-    try:
+try:
+    if BG_KEY and BG_SECRET and BG_PASS:
         exchange = ccxt.bitget({'apiKey': BG_KEY, 'secret': BG_SECRET, 'password': BG_PASS})
         crypto_name = "Bitget"
-    except: pass
-elif BN_KEY and BN_SECRET:
-    try:
+    elif BN_KEY and BN_SECRET:
         exchange = ccxt.binance({'apiKey': BN_KEY, 'secret': BN_SECRET})
         crypto_name = "Binance"
-    except: pass
+except: pass
 
 # 幣種對照
 BITGET_MAP = {'PEPE': 'PEPE24478-USD', 'RNDR': 'RENDER-USD', 'RENDER': 'RENDER-USD', 'BONK': 'BONK-USD', 'WIF': 'WIF-USD', 'FLOKI': 'FLOKI-USD'}
 REV_BITGET_MAP = {v: k for k, v in BITGET_MAP.items()}
 
 # ==========================================
-# 2. V157 完整戰力池 (74檔)
+# 2. V157 完整戰力池
 # ==========================================
 STRATEGIC_POOL = {
     'CRYPTO': [
@@ -83,7 +82,7 @@ def send_line(msg):
     if not LINE_TOKEN or not LINE_USER: return
     url = "https://api.line.me/v2/bot/message/push"
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {LINE_TOKEN}"}
-    payload = {"to": LINE_USER, "messages": [{"type": "text", "text": msg}]}
+    payload = {"to": LINE_USER, "messages": [{"type": "text", "text": message}]}
     requests.post(url, headers=headers, json=payload)
 
 def get_crypto_symbol(yf_ticker):
@@ -127,38 +126,51 @@ def sync_crypto(state):
         return state, f"❌ Crypto 失敗: {str(e)[:20]}...\n"
 
 def sync_tw_stock(state):
-    """同步永豐金持倉 (增強版)"""
-    if not (SJ_UID and SJ_PASS and SJ_CERT_B64): return state, "⚠️ 永豐金 API 未設定\n"
+    """同步永豐金持倉 (修復版)"""
+    if not (SJ_UID and SJ_PASS and SJ_CERT_B64):
+        return state, "⚠️ 永豐金 API 未設定\n"
+    
     if not sj: return state, "⚠️ 環境缺少 shioaji\n"
 
     log = ""
-    api = sj.Shioaji(simulation=False) # 強制實戰模式
-    pfx_path = os.path.abspath("temp_cert.pfx") # 使用絕對路徑
+    # 強制使用絕對路徑，確保 GitHub Actions 找得到檔案
+    pfx_path = os.path.join(os.getcwd(), "Sinopac.pfx")
     
     try:
         # 1. 還原憑證
-        with open(pfx_path, "wb") as f: f.write(base64.b64decode(SJ_CERT_B64))
+        with open(pfx_path, "wb") as f:
+            f.write(base64.b64decode(SJ_CERT_B64))
         
-        # 2. 登入
-        api.login(api_key=SJ_UID, secret_key=SJ_PASS)
-        # 等待登入完成
-        time.sleep(2)
+        # 2. 初始化 API (simulation=False 為實戰模式)
+        api = sj.Shioaji(simulation=False)
         
-        # 3. 啟用 CA
-        api.activate_ca(ca_path=pfx_path, ca_passwd=SJ_PASS, person_id=SJ_UID)
-        # 等待簽章模組載入
-        time.sleep(5) 
+        # 3. 登入
+        accounts = api.login(api_key=SJ_UID, secret_key=SJ_PASS)
+        # 確保登入成功再繼續
+        if not accounts:
+            return state, "❌ 台股登入失敗: 帳號密碼錯誤\n"
+            
+        # 4. 啟用 CA
+        # 這裡加入 retry 機制，防止網路延遲
+        retry = 3
+        while retry > 0:
+            try:
+                api.activate_ca(ca_path=pfx_path, ca_passwd=SJ_PASS, person_id=SJ_UID)
+                break
+            except Exception as e:
+                retry -= 1
+                time.sleep(2)
+                if retry == 0: raise e
         
-        # 4. 抓取庫存
+        # 5. 抓取庫存
+        time.sleep(3) # 等待資料同步
         positions = api.list_positions(unit=sj.constant.Unit.Share)
         
         tw_holdings = {}
-        # 檢查是否成功抓取到物件
-        if positions:
-            for p in positions:
-                ticker = f"{p.code}.TW"
-                if ticker in STRATEGIC_POOL['STOCKS']:
-                    tw_holdings[ticker] = {"cost": float(p.price)}
+        for p in positions:
+            ticker = f"{p.code}.TW"
+            if ticker in STRATEGIC_POOL['STOCKS']:
+                tw_holdings[ticker] = {"cost": float(p.price)}
         
         new_assets = state['held_assets'].copy()
         
@@ -174,7 +186,6 @@ def sync_tw_stock(state):
                 new_assets[t] = {"entry": data['cost'], "high": data['cost']}
                 log += f"➕ 台股新增: {t}\n"
             else:
-                # 僅更新成本，保留 high
                 new_assets[t]['entry'] = data['cost']
 
         state['held_assets'] = new_assets
@@ -184,71 +195,64 @@ def sync_tw_stock(state):
 
     except Exception as e:
         if os.path.exists(pfx_path): os.remove(pfx_path)
-        # 只顯示關鍵錯誤訊息
         return state, f"❌ 台股失敗: {str(e)[:40]}...\n"
 
 # ==========================================
-# 4. 主程式 (戰情室升級)
+# 4. 主程式
 # ==========================================
 def main():
-    tz = pytz.timezone('Asia/Taipei')
-    now = datetime.now(tz)
     print(f"🚀 V157 Omega 啟動...")
     
-    # 1. 抓取數據 (V117 邏輯)
     try:
         data = yf.download(ALL_TICKERS, period='300d', progress=False, auto_adjust=True)
         prices = data['Close'].ffill()
         ma20 = prices.rolling(20).mean()
-        ma50 = prices.rolling(50).mean() # 季線
-        
+        ma50 = prices.rolling(50).mean()
         ma200_spy = prices['^GSPC'].rolling(200).mean()
         
-        # 台股季線
-        tw_idx = '^TWII' if '^TWII' in prices else '^GSPC'
-        ma60_tw = prices[tw_idx].rolling(60).mean()
-        
-        # 幣圈牛熊
         btc_ma100 = prices['BTC-USD'].rolling(100).mean() if 'BTC-USD' in prices else ma200_spy
-        
         mom_20 = prices.pct_change(20)
     except:
         send_line("❌ 數據抓取失敗"); return
 
-    # 2. 狀態
+    # 狀態
     state_file = 'state.json'
     if os.path.exists(state_file):
         with open(state_file, 'r') as f: state = json.load(f)
     else: state = {"held_assets": {}}
 
-    # 3. 同步
+    # 同步
     state, c_log = sync_crypto(state)
     state, t_log = sync_tw_stock(state)
     
-    report = f"🔱 V157 Omega 戰情室\n📅 {now.strftime('%Y-%m-%d %H:%M')}\n"
-    report += f"{c_log}{t_log}"
-    report += "➖➖➖➖➖➖➖➖➖➖\n"
-    
+    # 報告
     today_p = prices.iloc[-1]
-    
-    # 4. 市場氣象
     spy_bull = today_p['^GSPC'] > ma200_spy.iloc[-1]
     btc_p = today_p['BTC-USD'] if 'BTC-USD' in today_p else 0
     btc_bull = btc_p > btc_ma100.iloc[-1]
-    tw_bull = today_p[tw_idx] > ma60_tw.iloc[-1]
+    
+    # 台股牛熊 (季線)
+    tw_idx = '^TWII' if '^TWII' in prices else '^GSPC'
+    # 簡單防呆: 若沒抓到 TWII 則不顯示
+    tw_bull_text = "N/A"
+    if tw_idx in prices:
+        ma60_tw = prices[tw_idx].rolling(60).mean().iloc[-1]
+        tw_bull_text = '🟢牛' if today_p[tw_idx] > ma60_tw else '🔴熊'
+    
+    report = f"🔱 V157 Omega 戰情室\n"
+    report += f"{c_log}{t_log}"
+    report += "➖➖➖➖➖➖➖➖➖➖\n"
     
     report += f"📡 市場氣象站\n"
-    report += f"🇺🇸 美股: {'🟢牛' if spy_bull else '🔴熊'}\n"
-    report += f"🇹🇼 台股: {'🟢牛' if tw_bull else '🔴熊'}\n"
+    report += f"🇺🇸 美股: {'🟢牛' if spy_bull else '🔴熊'} | 🇹🇼 台股: {tw_bull_text}\n"
     report += f"₿  幣圈: {'🟢牛' if btc_bull else '🔴熊'}\n"
     report += "➖➖➖➖➖➖➖➖➖➖\n"
 
-    # 5. 持倉詳細監控 (恢復詳細資訊)
+    # 持倉監控
     sell_alerts = []
     positions = 0
-    
     if state['held_assets']:
-        report += "💼 持倉狀態監控：\n"
+        report += "💼 持倉狀態：\n"
         for sym, info in list(state['held_assets'].items()):
             if sym not in today_p.index or pd.isna(today_p[sym]): continue
             positions += 1
@@ -257,56 +261,46 @@ def main():
             entry_p = info.get('entry', 0)
             m50 = ma50[sym].iloc[-1]
             
-            # 更新最高價
             info['high'] = max(info.get('high', curr_p), curr_p)
-            stop_line = info['high'] * 0.75 # 25% 移動停利
+            stop_line = info['high'] * 0.75
             
-            # 損益
             pnl = (curr_p - entry_p)/entry_p*100 if entry_p > 0 else 0
             icon = "🔥" if pnl > 0 else "❄️"
             
-            # 距離止損
-            final_stop = max(stop_line, entry_p * 0.85) # 包含硬止損
-            dist_to_stop = (curr_p - final_stop) / curr_p * 100
-            
             ma50_str = f"{m50:.1f}" if not pd.isna(m50) else "N/A"
-            
             report += f"🔸 {sym} ({icon}{pnl:.1f}%)\n"
-            report += f"   現:{curr_p:.1f} | 本:{entry_p:.1f}\n"
-            report += f"   止損:{final_stop:.1f} (距 {dist_to_stop:.1f}%)\n"
-            report += f"   MA50:{ma50_str}\n"
+            report += f"   現:{curr_p:.1f} | 止:{stop_line:.1f}\n"
             
             if not pd.isna(m50) and curr_p < m50:
-                sell_alerts.append(f"❌ 賣出 {sym}: 跌破季線")
+                sell_alerts.append(f"❌ 賣出 {sym} (破季線)")
             elif curr_p < stop_line:
-                sell_alerts.append(f"🟠 賣出 {sym}: 獲利回吐")
-            elif entry_p > 0 and curr_p < entry_p * 0.85:
-                sell_alerts.append(f"🔴 賣出 {sym}: 硬止損")
+                sell_alerts.append(f"🟠 賣出 {sym} (移動停利)")
     else:
         report += "💼 目前無持倉 (空手觀望)\n"
 
     if sell_alerts:
         report += "\n🚨 【緊急賣出訊號】\n" + "\n".join(sell_alerts) + "\n"
 
-    # 6. 買入建議
+    # 買入建議
     cands = []
     slots = 3 - positions
     
-    if slots > 0 and (spy_bull or btc_bull or tw_bull):
+    # 台股是否牛市? (用於過濾台股標的)
+    is_tw_bull = '牛' in tw_bull_text
+
+    if slots > 0 and (spy_bull or btc_bull or is_tw_bull):
         for t in [x for x in prices.columns if x not in ['^GSPC', '^TWII']]:
             if t in state['held_assets']: continue
             
-            # 分市場過濾
             is_crypto = "-USD" in t
             is_tw = ".TW" in t
             if is_crypto and not btc_bull: continue
-            if is_tw and not tw_bull: continue
+            if is_tw and not is_tw_bull: continue
             if not is_crypto and not is_tw and not spy_bull: continue
             
             p = today_p[t]
-            if pd.isna(p) or pd.isna(ma50[t].iloc[-1]): continue
+            if pd.isna(p) or pd.isna(ma20[t].iloc[-1]) or pd.isna(ma50[t].iloc[-1]): continue
             
-            # V117 進場：站上月線與季線
             if p > ma20[t].iloc[-1] and p > ma50[t].iloc[-1]:
                 score = mom_20[t].iloc[-1]
                 if pd.isna(score): continue
@@ -315,16 +309,14 @@ def main():
                 if is_lev: score *= 1.4
                 
                 if score > 0: 
-                    reason = "[槓桿加成]" if is_lev else "[強勢動能]"
-                    if score > 0.5: reason += "🔥"
+                    reason = "[槓桿加成🔥]" if is_lev else "[強勢動能]"
                     cands.append((t, score, p, reason))
         
         cands.sort(key=lambda x: x[1], reverse=True)
         if cands:
             report += f"\n🚀 【進場建議】(剩 {slots} 席)\n"
             pos_size_pct = 33.3 
-            for i in range(min(slots, 3)):
-                sym, sc, p, r = cands[i]
+            for i, (sym, sc, p, r) in enumerate(cands[:slots]):
                 stop = p * 0.85
                 report += f"💎 {sym} {r}\n"
                 report += f"   建議權重: {pos_size_pct}%\n   建議價: {p:.2f} | 止損: {stop:.1f}\n"
