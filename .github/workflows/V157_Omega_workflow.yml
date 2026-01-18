@@ -35,7 +35,7 @@ jobs:
           pip install yfinance pandas numpy requests ccxt pytz
 
       # 4. 執行 V157 Omega 實戰腳本
-      - name: Run V157 Omega Strategy
+      - name: Run "V157_Omega.py"
         env:
           # 從 GitHub Secrets 讀取金鑰 (請確保已在 Repo Settings 設定)
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
