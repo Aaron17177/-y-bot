@@ -35,14 +35,14 @@ jobs:
           pip install yfinance pandas numpy requests ccxt pytz
 
       # 4. 執行 V157 Omega 實戰腳本
-      - name: Run "V157_Omega.py"
+      - name: Run V157_Omega.py
         env:
           # 從 GitHub Secrets 讀取金鑰 (請確保已在 Repo Settings 設定)
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
           BINANCE_API_KEY: ${{ secrets.BINANCE_API_KEY }}
           BINANCE_SECRET_KEY: ${{ secrets.BINANCE_SECRET_KEY }}
-        run: V157_Omega.py
+        run: python "V157_Omega.py"
 
       # 5. 自動存檔 (將更新後的 state.json 推送回 GitHub)
       - name: Commit and Push State Change
