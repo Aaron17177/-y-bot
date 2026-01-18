@@ -14,32 +14,34 @@ import pytz
 LINE_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
 LINE_USER_ID = os.getenv('LINE_USER_ID')
 
-# 幣安 (Binance) API
-BN_KEY = os.getenv('BINANCE_API_KEY')
-BN_SECRET = os.getenv('BINANCE_SECRET_KEY')
+# Bitget API 配置 (需 Key, Secret, Password)
+BG_KEY = os.getenv('BITGET_API_KEY')
+BG_SECRET = os.getenv('BITGET_SECRET_KEY')
+BG_PASS = os.getenv('BITGET_PASSWORD')
 
-# 台股 (TW Stocks) API [新增]
+# 台股 (TW Stocks) API [保留供未來擴充]
 TW_KEY = os.getenv('TWSTOCKS_API_KEY')
 TW_SECRET = os.getenv('TWSTOCKS_SECRET_KEY')
 
-# 初始化幣安客戶端 (只讀權限)
+# 初始化 Bitget 客戶端 (只讀權限)
 exchange = None
-if BN_KEY and BN_SECRET:
+if BG_KEY and BG_SECRET and BG_PASS:
     try:
-        exchange = ccxt.binance({
-            'apiKey': BN_KEY,
-            'secret': BN_SECRET,
+        exchange = ccxt.bitget({
+            'apiKey': BG_KEY,
+            'secret': BG_SECRET,
+            'password': BG_PASS,
             'enableRateLimit': True,
         })
     except Exception as e:
-        print(f"⚠️ 幣安連線初始化失敗: {e}")
+        print(f"⚠️ Bitget 連線初始化失敗: {e}")
 
-# --- 幣種代號對照表 ---
-BINANCE_TO_YF = {
+# --- 幣種代號對照表 (Bitget ↔ Yahoo Finance) ---
+BITGET_TO_YF = {
     'PEPE': 'PEPE24478-USD', 'RNDR': 'RENDER-USD', 'RENDER': 'RENDER-USD',
     'BONK': 'BONK-USD', 'WIF': 'WIF-USD', 'FLOKI': 'FLOKI-USD', 'SHIB': 'SHIB-USD'
 }
-YF_TO_BINANCE = {v: k for k, v in BINANCE_TO_YF.items()}
+YF_TO_BITGET = {v: k for k, v in BITGET_TO_YF.items()}
 
 # ==========================================
 # 2. V157 Omega 完整戰力池
@@ -90,55 +92,70 @@ def send_line_push(message):
     except Exception as e:
         print(f"❌ LINE 連線異常: {e}")
 
-def get_binance_symbol(yf_ticker):
-    if yf_ticker in YF_TO_BINANCE: base = YF_TO_BINANCE[yf_ticker]
+def get_bitget_symbol(yf_ticker):
+    """將 Yahoo Ticker 轉為 Bitget 交易對 (例如 BTC-USD -> BTC/USDT)"""
+    if yf_ticker in YF_TO_BITGET: base = YF_TO_BITGET[yf_ticker]
     else: base = yf_ticker.replace('-USD', '')
     return f"{base}/USDT"
 
-def sync_holdings_with_binance(state):
-    """自動偵測幣安持倉並更新追蹤帳本"""
-    # 這裡未來可以加入 if TW_KEY: sync_with_tw_broker()... 的邏輯
+def sync_holdings_with_bitget(state):
+    """自動偵測 Bitget 持倉並更新追蹤帳本"""
+    if not exchange: return state, "⚠️ Bitget API 未設定，僅能手動同步持倉\n"
     
-    if not exchange: return state, "⚠️ 幣安 API 未設定，僅能手動同步持倉\n"
     try:
+        # 設定超時，避免卡死
+        exchange.timeout = 10000 
         balance = exchange.fetch_balance()
+        
         api_holdings = {}
+        # 遍歷 Bitget 帳戶 (total 包含現貨餘額)
         for coin, total in balance['total'].items():
             if total > 0:
-                ticker = BINANCE_TO_YF.get(coin, f"{coin}-USD")
-                if ticker in STRATEGIC_POOL['CRYPTO']: api_holdings[ticker] = total
+                # 嘗試將 Bitget 幣名轉回 YF Ticker
+                ticker = BITGET_TO_YF.get(coin, f"{coin}-USD")
+                
+                # 只同步戰力池內的幣種
+                if ticker in STRATEGIC_POOL['CRYPTO']:
+                    api_holdings[ticker] = total
         
         sync_log = ""
         new_assets = {}
+        
         # A. 更新/新增 API 偵測到的幣種
         for ticker, amount in api_holdings.items():
             if ticker in state['held_assets']:
                 new_assets[ticker] = state['held_assets'][ticker]
             else:
                 try:
-                    symbol_ccxt = get_binance_symbol(ticker)
+                    symbol_ccxt = get_bitget_symbol(ticker)
+                    # 抓取最近成交以估算成本
                     trades = exchange.fetch_my_trades(symbol_ccxt, limit=1)
                     entry_p = trades[0]['price'] if trades else 0
                 except: entry_p = 0 
                 new_assets[ticker] = {"entry": entry_p, "high": entry_p}
-                sync_log += f"➕ 新增持倉: {ticker}\n"
+                sync_log += f"➕ Bitget 新增持倉: {ticker}\n"
 
-        # B. 檢查已賣出
+        # B. 檢查已賣出 (若 state 有但 API 沒有)
         for ticker in list(state['held_assets'].keys()):
             if "-USD" in ticker and ticker not in api_holdings:
-                sync_log += f"➖ 偵測清倉: {ticker}\n"
+                sync_log += f"➖ Bitget 偵測清倉: {ticker}\n"
         
-        # C. 保留非 Crypto 標的 (美股/台股)
+        # C. 保留非 Crypto 標的 (美股/台股維持手動)
         for ticker, info in state['held_assets'].items():
             if "-USD" not in ticker: new_assets[ticker] = info
         
         state['held_assets'] = new_assets
-        if not sync_log: sync_log = "✅ 帳戶同步完成 (無變動)\n"
+        if not sync_log: sync_log = "✅ Bitget 帳戶同步完成 (無變動)\n"
         return state, sync_log
-    except Exception as e: return state, f"❌ 同步異常: {str(e)}\n"
+
+    except Exception as e:
+        err_msg = str(e)
+        if "451" in err_msg or "restricted" in err_msg:
+             return state, "⚠️ IP 被 Bitget 阻擋，切換至手動記帳模式。\n"
+        return state, f"❌ Bitget API 同步異常: {err_msg[:50]}...\n"
 
 # ==========================================
-# 4. 主決策引擎
+# 4. 主決策引擎 (倉位建議優化版)
 # ==========================================
 def main():
     tz = pytz.timezone('Asia/Taipei')
@@ -152,6 +169,7 @@ def main():
         ma20 = prices.rolling(20).mean()
         ma50 = prices.rolling(50).mean()
         ma200_spy = prices['^GSPC'].rolling(200).mean()
+        # 幣圈牛熊 (若有 BTC 則以 BTC 為準，否則看 SPY)
         btc_ma100 = prices['BTC-USD'].rolling(100).mean() if 'BTC-USD' in prices else ma200_spy 
         mom_20 = prices.pct_change(20)
     except Exception as e:
@@ -161,7 +179,9 @@ def main():
     # B. 狀態與同步
     state_file = 'state.json'
     state = json.load(open(state_file)) if os.path.exists(state_file) else {"held_assets": {}}
-    state, sync_info = sync_holdings_with_binance(state)
+    
+    # 執行 Bitget 同步
+    state, sync_info = sync_holdings_with_bitget(state)
     
     today_p = prices.iloc[-1]
     
@@ -242,15 +262,13 @@ def main():
 
     # D. 買入掃描 (Top 3)
     candidates = []
-    
-    # 策略限制：最多持有 3 檔
     slots_left = 3 - current_positions_count
     
     if slots_left > 0 and (spy_bull or btc_bull):
         for t in [x for x in prices.columns if x != '^GSPC']:
             if t in state['held_assets']: continue
             
-            # 分市場過濾
+            # 分市場過濾 (幣圈看幣圈，美股看美股)
             is_crypto = "-USD" in t
             if is_crypto and not btc_bull: continue
             if not is_crypto and not spy_bull: continue
