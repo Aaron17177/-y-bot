@@ -7,7 +7,6 @@ import requests
 import ccxt
 import base64
 import time
-import gc # 引入垃圾回收機制
 from datetime import datetime
 import pytz
 
@@ -18,22 +17,25 @@ except ImportError:
     sj = None
 
 # ==========================================
-# 1. 核心配置 & Secrets
+# 1. 核心配置
 # ==========================================
 LINE_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
 LINE_USER = os.getenv('LINE_USER_ID')
 
-# Bitget
+# 交易所 Keys
 BG_KEY = os.getenv('BITGET_API_KEY')
 BG_SECRET = os.getenv('BITGET_SECRET_KEY')
 BG_PASS = os.getenv('BITGET_PASSWORD')
 
-# 永豐金
+BN_KEY = os.getenv('BINANCE_API_KEY')
+BN_SECRET = os.getenv('BINANCE_SECRET_KEY')
+
+# 台股 Keys
 SJ_UID = os.getenv('TWSTOCKS_API_KEY')
 SJ_PASS = os.getenv('TWSTOCKS_SECRET_KEY')
 SJ_CERT_B64 = os.getenv('SHIOAJI_PFX_BASE64')
 
-# 初始化 Crypto 客戶端
+# 初始化 Bitget (優先)
 exchange = None
 crypto_name = "Manual"
 if BG_KEY and BG_SECRET and BG_PASS:
@@ -41,12 +43,14 @@ if BG_KEY and BG_SECRET and BG_PASS:
         exchange = ccxt.bitget({'apiKey': BG_KEY, 'secret': BG_SECRET, 'password': BG_PASS})
         crypto_name = "Bitget"
     except: pass
+elif BN_KEY and BN_SECRET:
+    try:
+        exchange = ccxt.binance({'apiKey': BN_KEY, 'secret': BN_SECRET})
+        crypto_name = "Binance"
+    except: pass
 
 # 幣種對照
-BITGET_MAP = {
-    'PEPE': 'PEPE24478-USD', 'RNDR': 'RENDER-USD', 'RENDER': 'RENDER-USD',
-    'BONK': 'BONK-USD', 'WIF': 'WIF-USD', 'FLOKI': 'FLOKI-USD', 'SHIB': 'SHIB-USD'
-}
+BITGET_MAP = {'PEPE': 'PEPE24478-USD', 'RNDR': 'RENDER-USD', 'RENDER': 'RENDER-USD', 'BONK': 'BONK-USD', 'WIF': 'WIF-USD', 'FLOKI': 'FLOKI-USD'}
 REV_BITGET_MAP = {v: k for k, v in BITGET_MAP.items()}
 
 # ==========================================
@@ -73,7 +77,7 @@ STRATEGIC_POOL = {
 ALL_TICKERS = list(set([t for sub in STRATEGIC_POOL.values() for t in sub])) + ['^GSPC', '^TWII']
 
 # ==========================================
-# 3. 模組功能
+# 3. 功能模組
 # ==========================================
 def send_line(msg):
     if not LINE_TOKEN or not LINE_USER: return
@@ -88,7 +92,7 @@ def get_crypto_symbol(yf_ticker):
     return f"{base}/USDT"
 
 def sync_crypto(state):
-    """同步加密貨幣持倉"""
+    """同步 Crypto"""
     if not exchange: return state, f"⚠️ Crypto API 未設定\n"
     try:
         exchange.timeout = 15000
@@ -123,38 +127,55 @@ def sync_crypto(state):
         return state, f"❌ Crypto 失敗: {str(e)[:20]}...\n"
 
 def sync_tw_stock(state):
-    """同步永豐金持倉"""
+    """同步永豐金持倉 (增強版)"""
     if not (SJ_UID and SJ_PASS and SJ_CERT_B64): return state, "⚠️ 永豐金 API 未設定\n"
     if not sj: return state, "⚠️ 環境缺少 shioaji\n"
 
     log = ""
-    api = sj.Shioaji()
-    pfx_path = "temp_cert.pfx"
+    api = sj.Shioaji(simulation=False) # 強制實戰模式
+    pfx_path = os.path.abspath("temp_cert.pfx") # 使用絕對路徑
     
     try:
+        # 1. 還原憑證
         with open(pfx_path, "wb") as f: f.write(base64.b64decode(SJ_CERT_B64))
+        
+        # 2. 登入
         api.login(api_key=SJ_UID, secret_key=SJ_PASS)
-        api.activate_ca(ca_path=pfx_path, ca_passwd=SJ_PASS, person_id=SJ_UID)
+        # 等待登入完成
         time.sleep(2)
         
+        # 3. 啟用 CA
+        api.activate_ca(ca_path=pfx_path, ca_passwd=SJ_PASS, person_id=SJ_UID)
+        # 等待簽章模組載入
+        time.sleep(5) 
+        
+        # 4. 抓取庫存
         positions = api.list_positions(unit=sj.constant.Unit.Share)
+        
         tw_holdings = {}
-        for p in positions:
-            ticker = f"{p.code}.TW"
-            if ticker in STRATEGIC_POOL['STOCKS']:
-                tw_holdings[ticker] = {"cost": float(p.price)}
+        # 檢查是否成功抓取到物件
+        if positions:
+            for p in positions:
+                ticker = f"{p.code}.TW"
+                if ticker in STRATEGIC_POOL['STOCKS']:
+                    tw_holdings[ticker] = {"cost": float(p.price)}
         
         new_assets = state['held_assets'].copy()
+        
+        # 檢查賣出
         for t in list(new_assets.keys()):
             if ".TW" in t and t not in tw_holdings:
                 del new_assets[t]
                 log += f"➖ 台股清倉: {t}\n"
         
+        # 檢查買入
         for t, data in tw_holdings.items():
             if t not in new_assets:
                 new_assets[t] = {"entry": data['cost'], "high": data['cost']}
                 log += f"➕ 台股新增: {t}\n"
-            else: new_assets[t]['entry'] = data['cost']
+            else:
+                # 僅更新成本，保留 high
+                new_assets[t]['entry'] = data['cost']
 
         state['held_assets'] = new_assets
         api.logout()
@@ -163,22 +184,21 @@ def sync_tw_stock(state):
 
     except Exception as e:
         if os.path.exists(pfx_path): os.remove(pfx_path)
-        return state, f"❌ 台股失敗: {str(e)[:20]}...\n"
+        # 只顯示關鍵錯誤訊息
+        return state, f"❌ 台股失敗: {str(e)[:40]}...\n"
 
 # ==========================================
-# 5. 主決策引擎 (實戰核心 - 輕量穩定版)
+# 4. 主程式 (戰情室升級)
 # ==========================================
 def main():
     tz = pytz.timezone('Asia/Taipei')
     now = datetime.now(tz)
     print(f"🚀 V157 Omega 啟動...")
     
-    # A. 抓取數據 (縮短週期並關閉多線程以防崩潰)
+    # 1. 抓取數據 (V117 邏輯)
     try:
-        data = yf.download(ALL_TICKERS, period='252d', progress=False, auto_adjust=True, threads=False)
+        data = yf.download(ALL_TICKERS, period='300d', progress=False, auto_adjust=True)
         prices = data['Close'].ffill()
-        
-        # V157 核心指標
         ma20 = prices.rolling(20).mean()
         ma50 = prices.rolling(50).mean() # 季線
         
@@ -191,52 +211,44 @@ def main():
         # 幣圈牛熊
         btc_ma100 = prices['BTC-USD'].rolling(100).mean() if 'BTC-USD' in prices else ma200_spy
         
-        # 動能計算 (使用 fill_method=None 避免警告與錯誤)
-        mom_20 = prices.pct_change(20, fill_method=None)
-        
-        # 手動清理記憶體
-        del data
-        gc.collect()
-        
-    except Exception as e:
-        print(f"Error: {e}")
-        send_line("❌ 數據抓取失敗: 記憶體溢出或網絡錯誤"); return
+        mom_20 = prices.pct_change(20)
+    except:
+        send_line("❌ 數據抓取失敗"); return
 
-    # B. 狀態與同步
+    # 2. 狀態
     state_file = 'state.json'
     if os.path.exists(state_file):
         with open(state_file, 'r') as f: state = json.load(f)
     else: state = {"held_assets": {}}
 
+    # 3. 同步
     state, c_log = sync_crypto(state)
     state, t_log = sync_tw_stock(state)
     
-    # C. 簡易大盤夏普 (只算 SPY，避免全體計算崩潰)
-    spy_ret = prices['^GSPC'].pct_change(fill_method=None).dropna()
-    sharpe = (spy_ret.mean() / spy_ret.std()) * np.sqrt(252)
-    
-    # D. 報告生成
     report = f"🔱 V157 Omega 戰情室\n📅 {now.strftime('%Y-%m-%d %H:%M')}\n"
     report += f"{c_log}{t_log}"
     report += "➖➖➖➖➖➖➖➖➖➖\n"
     
     today_p = prices.iloc[-1]
     
-    # 環境判定
+    # 4. 市場氣象
     spy_bull = today_p['^GSPC'] > ma200_spy.iloc[-1]
-    btc_bull = today_p['BTC-USD'] > btc_ma100.iloc[-1] if 'BTC-USD' in prices else False
+    btc_p = today_p['BTC-USD'] if 'BTC-USD' in today_p else 0
+    btc_bull = btc_p > btc_ma100.iloc[-1]
     tw_bull = today_p[tw_idx] > ma60_tw.iloc[-1]
     
-    report += f"📡 市場氣象 (SPY夏普: {sharpe:.2f})\n"
-    report += f"🇺🇸 美股: {'🟢牛' if spy_bull else '🔴熊'} | 🇹🇼 台股: {'🟢牛' if tw_bull else '🔴熊'}\n"
+    report += f"📡 市場氣象站\n"
+    report += f"🇺🇸 美股: {'🟢牛' if spy_bull else '🔴熊'}\n"
+    report += f"🇹🇼 台股: {'🟢牛' if tw_bull else '🔴熊'}\n"
     report += f"₿  幣圈: {'🟢牛' if btc_bull else '🔴熊'}\n"
     report += "➖➖➖➖➖➖➖➖➖➖\n"
 
-    # 持倉監控
+    # 5. 持倉詳細監控 (恢復詳細資訊)
     sell_alerts = []
     positions = 0
+    
     if state['held_assets']:
-        report += "💼 持倉監控：\n"
+        report += "💼 持倉狀態監控：\n"
         for sym, info in list(state['held_assets'].items()):
             if sym not in today_p.index or pd.isna(today_p[sym]): continue
             positions += 1
@@ -245,23 +257,38 @@ def main():
             entry_p = info.get('entry', 0)
             m50 = ma50[sym].iloc[-1]
             
+            # 更新最高價
             info['high'] = max(info.get('high', curr_p), curr_p)
-            stop_line = info['high'] * 0.75
+            stop_line = info['high'] * 0.75 # 25% 移動停利
             
+            # 損益
             pnl = (curr_p - entry_p)/entry_p*100 if entry_p > 0 else 0
             icon = "🔥" if pnl > 0 else "❄️"
             
-            ma50_str = f"{m50:.1f}" if not pd.isna(m50) else "N/A"
-            report += f"🔸 {sym} ({icon}{pnl:.1f}%)\n"
-            report += f"   現:{curr_p:.1f} | 止:{stop_line:.1f}\n"
+            # 距離止損
+            final_stop = max(stop_line, entry_p * 0.85) # 包含硬止損
+            dist_to_stop = (curr_p - final_stop) / curr_p * 100
             
-            if curr_p < m50: sell_alerts.append(f"❌ 賣出 {sym} (破季線)")
-            elif curr_p < stop_line: sell_alerts.append(f"🟠 賣出 {sym} (移動停利)")
+            ma50_str = f"{m50:.1f}" if not pd.isna(m50) else "N/A"
+            
+            report += f"🔸 {sym} ({icon}{pnl:.1f}%)\n"
+            report += f"   現:{curr_p:.1f} | 本:{entry_p:.1f}\n"
+            report += f"   止損:{final_stop:.1f} (距 {dist_to_stop:.1f}%)\n"
+            report += f"   MA50:{ma50_str}\n"
+            
+            if not pd.isna(m50) and curr_p < m50:
+                sell_alerts.append(f"❌ 賣出 {sym}: 跌破季線")
+            elif curr_p < stop_line:
+                sell_alerts.append(f"🟠 賣出 {sym}: 獲利回吐")
+            elif entry_p > 0 and curr_p < entry_p * 0.85:
+                sell_alerts.append(f"🔴 賣出 {sym}: 硬止損")
+    else:
+        report += "💼 目前無持倉 (空手觀望)\n"
 
     if sell_alerts:
         report += "\n🚨 【緊急賣出訊號】\n" + "\n".join(sell_alerts) + "\n"
 
-    # 買入建議
+    # 6. 買入建議
     cands = []
     slots = 3 - positions
     
@@ -295,10 +322,12 @@ def main():
         cands.sort(key=lambda x: x[1], reverse=True)
         if cands:
             report += f"\n🚀 【進場建議】(剩 {slots} 席)\n"
-            for i, (sym, sc, p, r) in enumerate(cands[:slots]):
+            pos_size_pct = 33.3 
+            for i in range(min(slots, 3)):
+                sym, sc, p, r = cands[i]
                 stop = p * 0.85
                 report += f"💎 {sym} {r}\n"
-                report += f"   建議權重: 33% | 價:{p:.2f}\n"
+                report += f"   建議權重: {pos_size_pct}%\n   建議價: {p:.2f} | 止損: {stop:.1f}\n"
 
     send_line(report)
     with open('state.json', 'w') as f: json.dump(state, f, indent=4)
