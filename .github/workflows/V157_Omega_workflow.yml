@@ -32,7 +32,7 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install yfinance pandas numpy requests ccxt pytz
+          pip install yfinance pandas numpy requests ccxt pytz shioaji
 
       # 4. 執行 V157 Omega 實戰腳本
       - name: Run V157_Omega.py
@@ -44,9 +44,10 @@ jobs:
           BITGET_API_KEY: ${{ secrets.BITGET_API_KEY }}
           BITGET_SECRET_KEY: ${{ secrets.BITGET_SECRET_KEY }}
           BITGET_PASSWORD: ${{ secrets.BITGET_PASSWORD }}
-          # 台股 API
-          TWSTOCKS_API_KEY: ${{ secrets.TWSTOCKS_API_KEY }}
-          TWSTOCKS_SECRET_KEY: ${{ secrets.TWSTOCKS_SECRET_KEY }}
+          # 永豐金 (台股) 設定
+          TWSTOCKS_API_KEY: ${{ secrets.TWSTOCKS_API_KEY }} # 身分證字號
+          TWSTOCKS_SECRET_KEY: ${{ secrets.TWSTOCKS_SECRET_KEY }} # 密碼
+          SHIOAJI_PFX_BASE64: ${{ secrets.SHIOAJI_PFX_BASE64 }} # 憑證亂碼
         run: python "V157_Omega.py"
 
       # 5. 自動存檔 (將更新後的 state.json 推送回 GitHub)
@@ -57,6 +58,9 @@ jobs:
           
           # 加入 state.json 到暫存區
           git add state.json
+          
+          # 檢查是否有變動，有變動才 Commit，避免報錯
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-sync Full state [skip ci]" && git push)
           
           # 檢查是否有變動，有變動才 Commit，避免報錯
           git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-sync state.json [skip ci]" && git push)
