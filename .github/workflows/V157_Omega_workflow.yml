@@ -40,8 +40,10 @@ jobs:
           # 從 GitHub Secrets 讀取金鑰 (請確保已在 Repo Settings 設定)
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
-          BINANCE_API_KEY: ${{ secrets.BINANCE_API_KEY }}
-          BINANCE_SECRET_KEY: ${{ secrets.BINANCE_SECRET_KEY }}
+           # Bitget 設定 (替換掉原本的 Binance)
+          BITGET_API_KEY: ${{ secrets.BITGET_API_KEY }}
+          BITGET_SECRET_KEY: ${{ secrets.BITGET_SECRET_KEY }}
+          BITGET_PASSWORD: ${{ secrets.BITGET_PASSWORD }}
         run: python "V157_Omega.py"
 
       # 5. 自動存檔 (將更新後的 state.json 推送回 GitHub)
