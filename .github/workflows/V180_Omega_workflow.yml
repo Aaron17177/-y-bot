@@ -1,4 +1,4 @@
-name: V18O_Omega Daily Strategy Run
+name: V181_Omega Daily Strategy Run
 
 on:
   schedule:
@@ -31,4 +31,4 @@ jobs:
         # 讀取 GitHub Secrets 並注入環境變數
         LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
         LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
-      run: python "V180_Omega.py"
+      run: python "V181_Omega.py"
