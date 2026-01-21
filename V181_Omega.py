@@ -7,59 +7,40 @@ import json
 from datetime import datetime, timedelta
 
 # ==========================================
-# 1. 參數與戰力池 (V181-2026 戰略升級版)
+# 1. 參數與戰力池 (V181 最終定案版)
 # ==========================================
 # 讀取 LINE Messaging API 設定
 LINE_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
 LINE_USER_ID = os.getenv('LINE_USER_ID')
 
-# V181-2026 戰力池：加入對沖、軍工、原物料、新興市場
+# V181 戰力池：專注於流動性最好、趨勢最強的資產
+# 剔除了 TMF, YINN 等拖油瓶，只保留科技與主流幣
 STRATEGIC_POOL = {
     'CRYPTO': [
         'BTC-USD', 'ETH-USD', 'SOL-USD', 'BNB-USD', 
         'DOGE-USD', 'SHIB-USD', 
-        'PEPE24478-USD', # Pepe (Yahoo代碼)
-        'APT-USD', 'NEAR-USD', 'SUI-USD', # 高性能公鏈
-        'FET-USD', 'RENDER-USD', 'WLD-USD', # AI Crypto
+        'PEPE24478-USD', # 修正代碼
+        'APT-USD', 'NEAR-USD',   
+        'FET-USD', 'RENDER-USD', 'WLD-USD', # AI 概念
         'LINK-USD', 'AVAX-USD'
     ],
     'LEVERAGE': [
-        # --- 科技進攻 ---
+        # 只保留最強勢的科技/比特幣槓桿
         'NVDL', 'SOXL', 'TQQQ', 'FNGU', 'TSLL', 
-        'CONL', 'BITU', 'USD', 'TECL',
-        # --- 全天候防禦與對沖 (V183概念導入) ---
-        'UVXY', # 1.5x 恐慌指數 (黑天鵝專用)
-        'TMF',  # 3x 美債 (經濟衰退/降息專用)
-        'ERX',  # 2x 能源 (通膨/油價上漲)
-        'NUGT', # 2x 金礦 (貨幣貶值/避險)
-        'LABU', # 3x 生技 (降息受惠/獨立行情)
-        'YINN', # 3x 中國 (估值修復/資金輪動)
-        'INDL'  # 2x 印度 (人口紅利/供應鏈轉移)
+        'CONL', 'BITU', 'USD', 'TECL'
     ],
     'US_STOCKS': [
-        # --- AI 與 科技巨頭 ---
+        # AI 與 科技巨頭
         'NVDA', 'AMD', 'TSLA', 'PLTR', 'MSTR', 'COIN',
         'SMCI', 'ARM', 'AVGO', 'META', 'AMZN', 'NFLX', 
-        'CRWD', 'PANW', 'ORCL', 'SHOP', 'VRT', 'ANET', 'SNOW', 
-        'APP',  # AppLovin (AI廣告)
-        'IONQ', 'RGTI', # 量子計算
-        # --- 實體經濟與防禦 ---
-        'LLY', 'VRTX', # 醫藥雙雄
-        'COST', # 消費防禦
-        'RTX', 'LMT', # 軍工國防 (地緣政治避險)
-        'COPX' # 銅礦ETF (AI基建/電力需求)
+        'LLY', 'VRTX', 'CRWD', 'PANW', 'ORCL', 'SHOP',
+        'APP', 'IONQ', 'RGTI', 
+        'VRT', 'ANET', 'SNOW', 'COST'
     ],
     'TW_STOCKS': [
-        '2330.TW', # 台積電
-        '2454.TW', # 聯發科
-        '2317.TW', # 鴻海
-        '2382.TW', # 廣達
-        '3231.TW', # 緯創
-        '6669.TW', # 緯穎
-        '3017.TW', # 奇鋐
-        '1519.TW', # 華城 (重電)
-        '1503.TW', # 士電 (重電)
-        '2603.TW', '2609.TW' # 航運
+        '2330.TW', '2454.TW', '2317.TW', '2382.TW',
+        '3231.TW', '6669.TW', '3017.TW',
+        '1519.TW', '1503.TW', '2603.TW', '2609.TW'
     ]
 }
 
@@ -88,10 +69,9 @@ def calculate_indicators(df):
     rs = gain / loss
     df['RSI'] = 100 - (100 / (1 + rs))
     
-    # 動能：20日漲跌幅
     df['Momentum'] = df['Close'].pct_change(periods=20)
     
-    # 取最後一筆「有效」數據 (Drop NA)
+    # 取最後一筆「有效」數據
     valid_df = df.dropna(subset=['MA200', 'RSI'])
     
     if valid_df.empty:
@@ -100,15 +80,14 @@ def calculate_indicators(df):
     return valid_df.iloc[-1]
 
 # ==========================================
-# 3. 市場環境判讀 (獨立序列修正版)
+# 3. 市場環境判讀 (獨立下載修正版)
 # ==========================================
 def analyze_market_regime():
-    # 下載數據，使用 auto_adjust=True 確保價格連續性
+    # 使用 SPY 代表美股大盤，避免 ^GSPC 抓不到數據
     tickers = ['SPY', 'BTC-USD', '^TWII']
     try:
         data = yf.download(tickers, period="365d", progress=False, auto_adjust=True)
         
-        # 處理 MultiIndex 列名
         if isinstance(data.columns, pd.MultiIndex):
             try:
                 df_close = data['Close']
@@ -119,7 +98,7 @@ def analyze_market_regime():
 
         regime = {}
         
-        # 1. 美股 SPY
+        # 1. 美股 SPY (獨立處理)
         try:
             spy_series = df_close['SPY'].dropna()
             if len(spy_series) > 200:
@@ -133,7 +112,7 @@ def analyze_market_regime():
             spy_price = 0
             regime['US_BULL'] = False
 
-        # 2. 幣圈 BTC
+        # 2. 幣圈 BTC (獨立處理)
         try:
             btc_series = df_close['BTC-USD'].dropna()
             if len(btc_series) > 200:
@@ -147,7 +126,7 @@ def analyze_market_regime():
             btc_price = 0
             regime['CRYPTO_BULL'] = False
             
-        # 3. 台股 TWII
+        # 3. 台股 TWII (獨立處理)
         try:
             tw_series = df_close['^TWII'].dropna()
             if len(tw_series) > 60:
@@ -177,15 +156,16 @@ def scan_pool(regime):
     
     print("📥 下載戰力池數據中...")
     try:
+        # 使用 auto_adjust=True
         data = yf.download(all_tickers, period="300d", progress=False, auto_adjust=True)
         
         if isinstance(data.columns, pd.MultiIndex):
             try:
                 closes = data['Close']
             except KeyError:
-                closes = data.ffill() # Fallback
+                closes = data
         else:
-            closes = data['Close'].ffill()
+            closes = data
             
     except Exception as e:
         return f"數據下載失敗: {str(e)}", []
@@ -212,15 +192,13 @@ def scan_pool(regime):
             asset_type = get_asset_type(symbol)
             
             # --- V181 篩選機制 ---
+            # 1. 趨勢濾網：價格 > 月線 且 月線 > 季線 (多頭排列)
             is_uptrend = price > ma20 and ma20 > ma50
             
+            # 2. 環境濾網 (決定倉位建議)
             note = "滿倉"
             
-            # 環境濾網 (決定倉位建議)
-            # 修正：對沖資產 (UVXY, TMF, NUGT, ERX) 不受熊市限制，反而可能是熊市主力
-            is_hedge_asset = symbol in ['UVXY', 'TMF', 'NUGT', 'ERX']
-            
-            if asset_type == 'LEVERAGE' and not is_hedge_asset:
+            if asset_type == 'LEVERAGE':
                 if not regime.get('US_BULL', False): note = "⚠️半倉(SPY<年線)"
             
             if asset_type == 'CRYPTO':
@@ -229,7 +207,8 @@ def scan_pool(regime):
             if asset_type == 'TW':
                 if not regime.get('TW_BULL', False): note = "⚠️小心(台股弱)"
 
-            # 買入資格確認
+            # 3. 買入資格確認
+            # 只有多頭排列且 RSI < 80 才買
             if is_uptrend and rsi < 80:
                 candidates.append({
                     'Symbol': symbol,
