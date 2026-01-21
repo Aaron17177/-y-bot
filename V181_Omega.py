@@ -7,37 +7,59 @@ import json
 from datetime import datetime, timedelta
 
 # ==========================================
-# 1. 參數與戰力池 (V181 修正版 - Fix 2)
+# 1. 參數與戰力池 (V181-2026 戰略升級版)
 # ==========================================
 # 讀取 LINE Messaging API 設定
 LINE_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
 LINE_USER_ID = os.getenv('LINE_USER_ID')
 
-# V181-2026 戰力池
+# V181-2026 戰力池：加入對沖、軍工、原物料、新興市場
 STRATEGIC_POOL = {
     'CRYPTO': [
         'BTC-USD', 'ETH-USD', 'SOL-USD', 'BNB-USD', 
         'DOGE-USD', 'SHIB-USD', 
-        'PEPE24478-USD', # 修正 PEPE 代碼
-        'APT-USD', 'NEAR-USD',   
-        'FET-USD', 'RENDER-USD', 'WLD-USD',
+        'PEPE24478-USD', # Pepe (Yahoo代碼)
+        'APT-USD', 'NEAR-USD', 'SUI-USD', # 高性能公鏈
+        'FET-USD', 'RENDER-USD', 'WLD-USD', # AI Crypto
         'LINK-USD', 'AVAX-USD'
     ],
     'LEVERAGE': [
+        # --- 科技進攻 ---
         'NVDL', 'SOXL', 'TQQQ', 'FNGU', 'TSLL', 
-        'CONL', 'BITU', 'USD', 'TECL'
+        'CONL', 'BITU', 'USD', 'TECL',
+        # --- 全天候防禦與對沖 (V183概念導入) ---
+        'UVXY', # 1.5x 恐慌指數 (黑天鵝專用)
+        'TMF',  # 3x 美債 (經濟衰退/降息專用)
+        'ERX',  # 2x 能源 (通膨/油價上漲)
+        'NUGT', # 2x 金礦 (貨幣貶值/避險)
+        'LABU', # 3x 生技 (降息受惠/獨立行情)
+        'YINN', # 3x 中國 (估值修復/資金輪動)
+        'INDL'  # 2x 印度 (人口紅利/供應鏈轉移)
     ],
     'US_STOCKS': [
+        # --- AI 與 科技巨頭 ---
         'NVDA', 'AMD', 'TSLA', 'PLTR', 'MSTR', 'COIN',
         'SMCI', 'ARM', 'AVGO', 'META', 'AMZN', 'NFLX', 
-        'LLY', 'VRTX', 'CRWD', 'PANW', 'ORCL', 'SHOP',
-        'APP', 'IONQ', 'RGTI', 
-        'VRT', 'ANET', 'SNOW', 'COST'
+        'CRWD', 'PANW', 'ORCL', 'SHOP', 'VRT', 'ANET', 'SNOW', 
+        'APP',  # AppLovin (AI廣告)
+        'IONQ', 'RGTI', # 量子計算
+        # --- 實體經濟與防禦 ---
+        'LLY', 'VRTX', # 醫藥雙雄
+        'COST', # 消費防禦
+        'RTX', 'LMT', # 軍工國防 (地緣政治避險)
+        'COPX' # 銅礦ETF (AI基建/電力需求)
     ],
     'TW_STOCKS': [
-        '2330.TW', '2454.TW', '2317.TW', '2382.TW',
-        '3231.TW', '6669.TW', '3017.TW',
-        '1519.TW', '1503.TW', '2603.TW', '2609.TW'
+        '2330.TW', # 台積電
+        '2454.TW', # 聯發科
+        '2317.TW', # 鴻海
+        '2382.TW', # 廣達
+        '3231.TW', # 緯創
+        '6669.TW', # 緯穎
+        '3017.TW', # 奇鋐
+        '1519.TW', # 華城 (重電)
+        '1503.TW', # 士電 (重電)
+        '2603.TW', '2609.TW' # 航運
     ]
 }
 
@@ -54,7 +76,6 @@ def calculate_indicators(df):
     if len(df) < 200: return None
     
     df = df.copy()
-    # 確保數據按時間排序
     df = df.sort_index()
     
     df['MA20'] = df['Close'].rolling(window=20).mean()
@@ -67,14 +88,14 @@ def calculate_indicators(df):
     rs = gain / loss
     df['RSI'] = 100 - (100 / (1 + rs))
     
+    # 動能：20日漲跌幅
     df['Momentum'] = df['Close'].pct_change(periods=20)
     
     # 取最後一筆「有效」數據 (Drop NA)
-    # 這是為了避免今天剛開盤只有 Close 但沒有 MA 的情況
     valid_df = df.dropna(subset=['MA200', 'RSI'])
     
     if valid_df.empty:
-        return df.iloc[-1] # Fallback
+        return df.iloc[-1] 
         
     return valid_df.iloc[-1]
 
@@ -89,7 +110,6 @@ def analyze_market_regime():
         
         # 處理 MultiIndex 列名
         if isinstance(data.columns, pd.MultiIndex):
-            # 嘗試獲取 Close，如果失敗則直接使用 data (視版本而定)
             try:
                 df_close = data['Close']
             except KeyError:
@@ -98,8 +118,6 @@ def analyze_market_regime():
             df_close = data
 
         regime = {}
-        
-        # --- 核心修正：獨立處理每一個標的，避免時間差導致的 NaN ---
         
         # 1. 美股 SPY
         try:
@@ -161,14 +179,13 @@ def scan_pool(regime):
     try:
         data = yf.download(all_tickers, period="300d", progress=False, auto_adjust=True)
         
-        # 統一轉為 Close DataFrame
         if isinstance(data.columns, pd.MultiIndex):
             try:
                 closes = data['Close']
             except KeyError:
-                closes = data
+                closes = data.ffill() # Fallback
         else:
-            closes = data
+            closes = data['Close'].ffill()
             
     except Exception as e:
         return f"數據下載失敗: {str(e)}", []
@@ -179,7 +196,6 @@ def scan_pool(regime):
         try:
             if symbol not in closes.columns: continue
             
-            # 關鍵修正：針對每個標的獨立 dropna，避免被其他市場的時間牽連
             series = closes[symbol].dropna()
             if len(series) < 200: continue
             
@@ -196,14 +212,15 @@ def scan_pool(regime):
             asset_type = get_asset_type(symbol)
             
             # --- V181 篩選機制 ---
-            # 1. 趨勢濾網：價格 > 月線 且 月線 > 季線
             is_uptrend = price > ma20 and ma20 > ma50
             
-            # 2. 環境濾網
             note = "滿倉"
             
-            # 只有當我們成功抓到大盤數據 (不是0) 時才進行判斷，否則預設保守
-            if asset_type == 'LEVERAGE':
+            # 環境濾網 (決定倉位建議)
+            # 修正：對沖資產 (UVXY, TMF, NUGT, ERX) 不受熊市限制，反而可能是熊市主力
+            is_hedge_asset = symbol in ['UVXY', 'TMF', 'NUGT', 'ERX']
+            
+            if asset_type == 'LEVERAGE' and not is_hedge_asset:
                 if not regime.get('US_BULL', False): note = "⚠️半倉(SPY<年線)"
             
             if asset_type == 'CRYPTO':
@@ -212,7 +229,7 @@ def scan_pool(regime):
             if asset_type == 'TW':
                 if not regime.get('TW_BULL', False): note = "⚠️小心(台股弱)"
 
-            # 3. 買入資格確認
+            # 買入資格確認
             if is_uptrend and rsi < 80:
                 candidates.append({
                     'Symbol': symbol,
@@ -261,9 +278,6 @@ def generate_report(regime, candidates, spy_p, btc_p, tw_p):
     msg = f"🔥 V181 Omega 每日戰報 🔥\n{today}\n"
     msg += "━━━━━━━━━━━━━━\n"
     
-    msg += "🌍 【大環境風向】\n"
-    
-    # 狀態顯示修正：避免顯示 0
     spy_disp = f"{spy_p:.0f}" if spy_p > 0 else "N/A"
     btc_disp = f"{btc_p:.0f}" if btc_p > 0 else "N/A"
     tw_disp = f"{tw_p:.0f}" if tw_p > 0 else "N/A"
@@ -286,7 +300,6 @@ def generate_report(regime, candidates, spy_p, btc_p, tw_p):
     rank = 1
     for item in top_picks:
         icon = "💎" if item['Type'] == 'CRYPTO' else "⚡" if item['Type'] == 'LEVERAGE' else "🏢"
-        # 處理台灣股票小數點
         price_fmt = f"{item['Price']:.0f}" if item['Type'] == 'TW' else f"{item['Price']:.2f}"
         
         msg += f"{rank}. {icon} {item['Symbol']}\n"
@@ -337,7 +350,4 @@ if __name__ == "__main__":
         send_line_message(msg)
     else:
         print("⚠️ 無符合條件標的，或數據下載失敗。")
-        error_msg = "⚠️ V181 系統訊息：數據下載異常或無標的符合條件。\n"
-        error_msg += f"SPY狀態: {spy}\n"
-        error_msg += "請檢查 GitHub Actions Log。"
-        send_line_message(error_msg)
+        send_line_message("⚠️ V181 系統訊息：今日無符合買入條件之標的，或數據源異常。")
