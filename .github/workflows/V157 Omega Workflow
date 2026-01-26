@@ -2,8 +2,8 @@ name: V157_Omega
 
 on:
   schedule:
-    # 每天 UTC 00:30 執行 (約台北時間 08:30，美股收盤後)
-    - cron: '30 0 * * *'
+    # 每天 UTC 12:00 執行 (台灣時間晚上 20:00)
+    - cron: '0 12 * * *'
   # 允許手動點擊 "Run workflow" 立即執行測試
   workflow_dispatch:
 
@@ -42,7 +42,8 @@ jobs:
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
           BINANCE_API_KEY: ${{ secrets.BINANCE_API_KEY }}
           BINANCE_SECRET_KEY: ${{ secrets.BINANCE_SECRET_KEY }}
-        run: V157_Omega.py
+        # 修正：加上 python 指令
+        run: python V157_Omega.py
 
       # 5. 自動存檔 (將更新後的 state.json 推送回 GitHub)
       - name: Commit and Push State Change
@@ -50,8 +51,8 @@ jobs:
           git config --global user.name "Omega-Bot"
           git config --global user.email "bot@github.com"
           
-          # 加入 state.json 到暫存區
-          git add state.json
+          # 加入 state.json 到暫存區 (如果檔案不存在或沒變動，git 會自動處理)
+          git add state.json || true
           
           # 檢查是否有變動，有變動才 Commit，避免報錯
           git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-sync state.json [skip ci]" && git push)
