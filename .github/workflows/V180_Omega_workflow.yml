@@ -2,10 +2,10 @@ name: V181 Daily Strategy Run
 
 on:
   schedule:
-    # 每天 UTC 21:30 執行 (台灣時間早上 05:30)
-    - cron: '30 21 * * *'
+    # 台灣時間晚上 20:00 = UTC 12:00
+    - cron: '0 12 * * *'
   
-  # 允許手動觸發
+  # 允許手動觸發 (方便你隨時測試)
   workflow_dispatch:
 
 jobs:
@@ -19,7 +19,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v2
       with:
-        # 關鍵修正：升級到 3.11 以支援 yfinance 最新版語法
+        # 維持使用 3.11 以支援 yfinance
         python-version: '3.11'
 
     - name: Install dependencies
@@ -34,5 +34,5 @@ jobs:
       env:
         LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
         LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
-      # 請確保你的 Python 檔案名稱是 V181_Omega.py
+      # 確保檔名與你 Repo 中的完全一致
       run: python "V181_Omega.py"
