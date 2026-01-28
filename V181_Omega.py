@@ -12,58 +12,38 @@ from datetime import datetime
 LINE_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
 LINE_USER_ID = os.getenv('LINE_USER_ID')
 PORTFOLIO_FILE = 'portfolio.csv'
+MIN_DAILY_VOLUME_USD = 500000  # 最低日成交額限制 (50萬美金 / 約1600萬台幣)
 
-# V181-2026 戰力池 (修正 SUI, TAO, PEPE 代號)
+# V181-2026 戰力池
 STRATEGIC_POOL = {
     'CRYPTO': [
-        # --- 主流與公鏈 ---
         'BTC-USD', 'ETH-USD', 'SOL-USD', 'BNB-USD', 
-        'APT-USD', 'NEAR-USD', 'AVAX-USD',
-        'SUI20947-USD', # SUI (Sui Network)
-        
-        # --- AI 賽道 ---
-        'FET-USD', 'RENDER-USD', 'WLD-USD', 
-        'TAO22974-USD', # TAO (Bittensor)
-        'LINK-USD', 
-
-        # --- 迷因 (Memes) ---
-        'DOGE-USD', 'SHIB-USD', 'PEPE24478-USD', 
-        'BONK-USD',
-        
-        # --- 老牌支付/隱私 ---
-        'BCH-USD', 'ZEC-USD', 'DASH-USD'
+        'DOGE-USD', 'SHIB-USD', 
+        'PEPE24478-USD', 'APT-USD', 'NEAR-USD', 'SUI20947-USD',
+        'FET-USD', 'RENDER-USD', 'WLD-USD', 'TAO22974-USD',
+        'LINK-USD', 'AVAX-USD',
+        'BCH-USD', 'ZEC-USD', 'DASH-USD',
+        'BONK-USD', 'HYPE-USD'
     ],
     'LEVERAGE': [
         'NVDL', 'SOXL', 'TQQQ', 'FNGU', 'TSLL', 
         'CONL', 'BITU', 'USD', 'TECL',
-        'MSTU', # 2倍 MSTR
-        'LABU'  # 3倍生技
+        'MSTU', 'LABU'
     ],
     'US_STOCKS': [
-        # --- AI 與 科技巨頭 ---
         'NVDA', 'AMD', 'TSLA', 'PLTR', 'MSTR', 'COIN',
         'SMCI', 'ARM', 'AVGO', 'META', 'AMZN', 'NFLX', 
         'LLY', 'VRTX', 'CRWD', 'PANW', 'ORCL', 'SHOP',
         'APP', 'IONQ', 'RGTI', 'RKLB', 'VRT', 'ANET', 'SNOW', 'COST',
-        'VST', 
-        
-        # --- 半導體設備與記憶體 ---
-        'MU', 'AMAT', 'LRCX', 'ASML', 'KLAC', 'GLW'
+        'VST', 'MU', 'AMAT', 'LRCX', 'ASML', 'KLAC', 'GLW'
     ],
     'TW_STOCKS': [
-        # --- 上市 (.TW) ---
         '2330.TW', '2454.TW', '2317.TW', '2382.TW',
         '3231.TW', '6669.TW', '3017.TW',
-        '1519.TW', '1503.TW', 
-        '2603.TW', '2609.TW',
+        '1519.TW', '1503.TW', '2603.TW', '2609.TW',
         '8996.TW', '6515.TW', '6442.TW', '6139.TW',
-        
-        # --- 上櫃 (.TWO) ---
-        '8299.TWO', # 群聯
-        '3529.TWO', # 力旺
-        '3081.TWO', # 聯亞
-        '6739.TWO', # 竹陞科技
-        '6683.TWO'  # 雍智科技
+        # 上櫃 (.TWO)
+        '8299.TWO', '3529.TWO', '3081.TWO', '6739.TWO', '6683.TWO'
     ]
 }
 
@@ -95,37 +75,48 @@ def calculate_indicators(df):
     # 動能
     df['Momentum'] = df['Close'].pct_change(periods=20)
     
-    # 取最新一筆有效數據
     return df.iloc[-1]
 
+def calculate_liquidity(df, symbol):
+    """計算過去5日的平均成交金額(USD)"""
+    try:
+        # 取最近5天
+        recent = df.tail(5).copy()
+        
+        # 轉換為 USD (簡單匯率估算)
+        exchange_rate = 1.0
+        if ".TW" in symbol or ".TWO" in symbol:
+            exchange_rate = 1 / 32.5 # 台幣轉美金
+            
+        # 成交金額 = 收盤價 * 成交量 * 匯率
+        recent['DollarVolume'] = recent['Close'] * recent['Volume'] * exchange_rate
+        avg_volume = recent['DollarVolume'].mean()
+        
+        return avg_volume
+    except:
+        return 0
+
 def load_portfolio():
-    """
-    讀取 GitHub 上的 portfolio.csv 並自動修正代碼
-    """
+    """讀取 GitHub 上的 portfolio.csv 並自動修正代碼"""
     holdings = {}
     if not os.path.exists(PORTFOLIO_FILE):
         return holdings
 
-    # 1. 建立自動對照表 (從戰力池反推)
+    # 建立對照表
     crypto_map = {}
     for c in STRATEGIC_POOL['CRYPTO']:
         if c.endswith('-USD'):
-            short_name = c.split('-')[0] # 例如 BTC, ETH
-            # 處理帶數字的 ID (如 PEPE24478 -> PEPE)
+            short_name = c.split('-')[0]
             if any(char.isdigit() for char in short_name):
                 alpha_only = ''.join(filter(str.isalpha, short_name))
                 crypto_map[alpha_only] = c
             crypto_map[short_name] = c
 
-    # 台股上櫃清單
     otc_list = ['8299', '3529', '3081', '6739', '6683']
 
-    # 2. 建立強制別名表 (覆蓋自動規則)
     alias_map = {
-        'RNDR': 'RENDER-USD',
-        'TAO': 'TAO22974-USD',
-        'SUI': 'SUI20947-USD',
-        'PEPE': 'PEPE24478-USD'
+        'RNDR': 'RENDER-USD', 'TAO': 'TAO22974-USD',
+        'SUI': 'SUI20947-USD', 'PEPE': 'PEPE24478-USD'
     }
 
     try:
@@ -133,32 +124,19 @@ def load_portfolio():
             reader = csv.reader(f)
             for row in reader:
                 if not row or len(row) < 2: continue
-                
                 raw_symbol = row[0].strip().upper()
                 symbol = raw_symbol
                 
-                # A. 優先檢查強制別名
-                if raw_symbol in alias_map:
-                    symbol = alias_map[raw_symbol]
-                
-                # B. 台股修正 (4位純數字)
+                if raw_symbol in alias_map: symbol = alias_map[raw_symbol]
                 elif raw_symbol.isdigit() and len(raw_symbol) == 4:
-                    if raw_symbol in otc_list:
-                        symbol = f"{raw_symbol}.TWO" # 上櫃
-                    else:
-                        symbol = f"{raw_symbol}.TW"  # 上市
+                    if raw_symbol in otc_list: symbol = f"{raw_symbol}.TWO"
+                    else: symbol = f"{raw_symbol}.TW"
+                elif raw_symbol in crypto_map: symbol = crypto_map[raw_symbol]
                 
-                # C. 通用 Crypto 修正
-                elif raw_symbol in crypto_map:
-                    symbol = crypto_map[raw_symbol]
-                
-                try:
-                    cost = float(row[1].strip())
-                except ValueError:
-                    cost = 0.0
+                try: cost = float(row[1].strip())
+                except: cost = 0.0
                 
                 if 'SYMBOL' in symbol: continue
-                
                 holdings[symbol] = {"entry_price": cost}
         return holdings
     except Exception as e:
@@ -207,7 +185,6 @@ def make_decision():
         try:
             tickers = list(portfolio.keys())
             data = yf.download(tickers, period="200d", progress=False, auto_adjust=True)
-            
             if isinstance(data.columns, pd.MultiIndex): closes = data['Close']
             else: closes = data
             if len(tickers) == 1: closes = pd.DataFrame({tickers[0]: data['Close']})
@@ -223,21 +200,17 @@ def make_decision():
                     price = curr_row['Close']
                     ma50 = curr_row['MA50']
                     rsi = curr_row['RSI']
-                    
                     entry = portfolio[symbol]['entry_price']
                     
                     reason = ""
-                    if price < ma50:
-                        reason = "❌ 跌破季線 (MA50)"
-                    elif entry > 0 and price < entry * 0.8:
-                        reason = "🔴 硬止損 (-20%)"
+                    if price < ma50: reason = "❌ 跌破季線 (MA50)"
+                    elif entry > 0 and price < entry * 0.8: reason = "🔴 硬止損 (-20%)"
                     
                     if reason:
                         sells.append({'Symbol': symbol, 'Price': price, 'Reason': reason})
                     else:
                         profit = (price - entry) / entry if entry > 0 else 0
                         stop_suggest = max(price * 0.8, ma50)
-                        
                         note = "續抱"
                         if rsi > 80:
                             note = "🔥 過熱 (請收緊停利至10%)"
@@ -245,11 +218,7 @@ def make_decision():
                         elif profit > 0.5:
                             note = "🔒 獲利>50% (請鎖定利潤)"
                             stop_suggest = max(stop_suggest, entry * 1.2)
-                        
-                        keeps.append({
-                            'Symbol': symbol, 'Price': price, 'Profit': profit, 
-                            'Stop': stop_suggest, 'Note': note, 'RSI': rsi
-                        })
+                        keeps.append({'Symbol': symbol, 'Price': price, 'Profit': profit, 'Stop': stop_suggest, 'Note': note, 'RSI': rsi})
                 except Exception as e:
                     print(f"處理 {symbol} 出錯: {e}")
                     keeps.append({'Symbol': symbol, 'Price': 0, 'Profit': 0, 'Stop': 0, 'Note': "數據錯誤", 'RSI': 0})
@@ -259,15 +228,25 @@ def make_decision():
     current_slots = len(keeps) 
     buys = []
     candidates = []
-    
     all_tickers = []
     for cat in STRATEGIC_POOL: all_tickers.extend(STRATEGIC_POOL[cat])
     
     print("📥 掃描全市場機會...")
     try:
         data = yf.download(all_tickers, period="250d", progress=False, auto_adjust=True)
-        if isinstance(data.columns, pd.MultiIndex): closes = data['Close'].ffill()
-        else: closes = data['Close'].ffill()
+        
+        # 處理資料列名
+        closes = None
+        volumes = None
+        
+        if isinstance(data.columns, pd.MultiIndex):
+            try: closes = data['Close'].ffill()
+            except: closes = data.ffill() # Fallback
+            
+            try: volumes = data['Volume'].ffill()
+            except: pass
+        else:
+            closes = data.ffill() # 只有一檔時可能沒有 MultiIndex
         
         for symbol in all_tickers:
             if symbol in closes.columns:
@@ -275,18 +254,38 @@ def make_decision():
                     series = closes[symbol].dropna()
                     if len(series) < 100: continue
                     
+                    # 1. 流動性檢測 (新增)
+                    avg_vol_usd = 0
+                    if volumes is not None and symbol in volumes.columns:
+                        vol_series = volumes[symbol].tail(10) # 取最近數據
+                        close_series = series.tail(10)
+                        
+                        # 簡易計算平均成交額
+                        val_series = vol_series * close_series
+                        avg_vol_raw = val_series.mean()
+                        
+                        # 匯率換算
+                        rate = 1/32.5 if (".TW" in symbol or ".TWO" in symbol) else 1.0
+                        avg_vol_usd = avg_vol_raw * rate
+                    
+                    # 如果成交額太低 (<50萬美金)，直接跳過
+                    # 若無法取得 Volume 數據 (例如某些指數)，則保守起見設為通過，或視為不通過
+                    # 這裡假設若有 Volume 數據才檢查，沒有則 Pass (避免誤殺 ETF)
+                    if avg_vol_usd > 0 and avg_vol_usd < MIN_DAILY_VOLUME_USD:
+                        continue 
+
                     df_t = pd.DataFrame({'Close': series})
                     row = calculate_indicators(df_t)
                     
-                    # 買入篩選 V181
-                    # 多頭排列 + RSI不過熱
+                    # 2. 技術篩選
                     if row['Close'] > row['MA20'] and row['MA20'] > row['MA50'] and row['RSI'] < 80:
                         candidates.append({
                             'Symbol': symbol,
                             'Score': row['Momentum'],
                             'Price': row['Close'],
                             'RSI': row['RSI'],
-                            'Type': get_asset_type(symbol)
+                            'Type': get_asset_type(symbol),
+                            'Vol': avg_vol_usd # 紀錄成交額
                         })
                 except: continue
         
@@ -296,11 +295,9 @@ def make_decision():
         if slots_needed > 0:
             for cand in candidates:
                 if len(buys) >= slots_needed: break
-                
                 is_held = False
                 for k in keeps:
                     if k['Symbol'] == cand['Symbol']: is_held = True
-                
                 if not is_held:
                     buys.append(cand)
                     
@@ -373,7 +370,12 @@ def generate_message(regime, sells, keeps, buys, top_list, spy, btc, tw):
     msg += "--------------------\n"
     rank = 1
     for x in top_list[:3]:
-        msg += f"{rank}. {x['Symbol']} (RSI:{x['RSI']:.0f})\n"
+        # 顯示成交量概況 (M = 百萬美金)
+        vol_str = ""
+        if 'Vol' in x and x['Vol'] > 0:
+            vol_str = f"| Vol:${x['Vol']/1000000:.1f}M"
+            
+        msg += f"{rank}. {x['Symbol']} (RSI:{x['RSI']:.0f} {vol_str})\n"
         rank += 1
         
     return msg
