@@ -13,30 +13,36 @@ LINE_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
 LINE_USER_ID = os.getenv('LINE_USER_ID')
 PORTFOLIO_FILE = 'portfolio.csv'
 
-# V181-2026 戰力池
+# V181-2026 戰力池 (完美覆蓋版)
 STRATEGIC_POOL = {
     'CRYPTO': [
         'BTC-USD', 'ETH-USD', 'SOL-USD', 'BNB-USD', 
         'DOGE-USD', 'SHIB-USD', 
-        'PEPE24478-USD', 'APT-USD', 'NEAR-USD',   
-        'FET-USD', 'RENDER-USD', 'WLD-USD',
+        'PEPE24478-USD', 'APT-USD', 'NEAR-USD', 'SUI-USD', # 公鏈新星
+        'FET-USD', 'RENDER-USD', 'WLD-USD', 'TAO-USD',     # AI Crypto 龍頭
         'LINK-USD', 'AVAX-USD'
     ],
     'LEVERAGE': [
         'NVDL', 'SOXL', 'TQQQ', 'FNGU', 'TSLL', 
-        'CONL', 'BITU', 'USD', 'TECL'
+        'CONL', 'BITU', 'USD', 'TECL',
+        'MSTU', # 2倍 MSTR (比特幣核彈)
+        'LABU'  # 3倍生技 (降息循環黑馬)
     ],
     'US_STOCKS': [
         'NVDA', 'AMD', 'TSLA', 'PLTR', 'MSTR', 'COIN',
         'SMCI', 'ARM', 'AVGO', 'META', 'AMZN', 'NFLX', 
         'LLY', 'VRTX', 'CRWD', 'PANW', 'ORCL', 'SHOP',
-        'APP', 'IONQ', 'RGTI', 
-        'VRT', 'ANET', 'SNOW', 'COST'
+        'APP',  # AI 廣告
+        'IONQ', 'RGTI', # 量子計算
+        'RKLB', # 太空經濟
+        'VRT', 'ANET', 'SNOW', 'COST',
+        'VST'   # AI 電力/核能
     ],
     'TW_STOCKS': [
         '2330.TW', '2454.TW', '2317.TW', '2382.TW',
         '3231.TW', '6669.TW', '3017.TW',
-        '1519.TW', '1503.TW', '2603.TW', '2609.TW'
+        '1519.TW', '1503.TW', # 重電
+        '2603.TW', '2609.TW'  # 航運
     ]
 }
 
@@ -72,7 +78,7 @@ def calculate_indicators(df):
     return df.iloc[-1]
 
 def load_portfolio():
-    """讀取 GitHub 上的 portfolio.csv"""
+    """讀取 GitHub 上的 portfolio.csv 並自動修正代碼"""
     holdings = {}
     if not os.path.exists(PORTFOLIO_FILE):
         print("⚠️ 找不到 portfolio.csv，假設為空手。")
@@ -83,14 +89,24 @@ def load_portfolio():
             reader = csv.reader(f)
             for row in reader:
                 if not row or len(row) < 2: continue
-                symbol = row[0].strip()
+                
+                # 1. 讀取與清理
+                raw_symbol = row[0].strip().upper()
+                
+                # 2. 智能修正代碼邏輯
+                # 如果是純數字且長度為4 (如 1503, 2330)，自動補上 .TW
+                if raw_symbol.isdigit() and len(raw_symbol) == 4:
+                    symbol = f"{raw_symbol}.TW"
+                else:
+                    symbol = raw_symbol
+                
                 try:
                     cost = float(row[1].strip())
                 except ValueError:
                     cost = 0.0
                 
                 # 簡單過濾掉標題行 (如果有的話)
-                if symbol.lower() == 'symbol': continue
+                if 'SYMBOL' in symbol: continue
                 
                 holdings[symbol] = {"entry_price": cost}
         return holdings
@@ -154,7 +170,9 @@ def make_decision():
             for symbol in tickers:
                 try:
                     series = closes[symbol].dropna()
-                    if len(series) < 60: continue # 數據不足跳過
+                    if len(series) < 60: 
+                        print(f"⚠️ {symbol} 數據不足，可能是代碼錯誤")
+                        continue
                     
                     # 計算指標
                     curr_row = calculate_indicators(pd.DataFrame({'Close': series}))
@@ -194,7 +212,8 @@ def make_decision():
             print(f"下載持倉數據失敗: {e}")
 
     # C. 掃描新機會 (買入邏輯)
-    current_slots = len(keeps) # 賣出後的剩餘空位
+    # 持倉數計算：只計算續抱的
+    current_holdings_count = len(keeps)
     buys = []
     candidates = []
     
@@ -290,7 +309,7 @@ def generate_message(regime, sells, keeps, buys, top_list, spy, btc, tw):
         msg += "🛡️ **【持倉監控】**\n"
         for x in keeps:
             profit = x['Profit'] * 100
-            emoji = "😍" if profit > 20 else "😐" if profit > 0 else "🤢"
+            emoji = "😍" if profit > 20 else "🙂" if profit > 0 else "🤢"
             msg += f"{emoji} {x['Symbol']} ({profit:+.1f}%)\n"
             msg += f"   狀態: {x['Note']}\n"
             msg += f"   防守價: {x['Stop']:.2f}\n"
