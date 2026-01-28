@@ -13,22 +13,34 @@ LINE_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
 LINE_USER_ID = os.getenv('LINE_USER_ID')
 PORTFOLIO_FILE = 'portfolio.csv'
 
-# V181-2026 戰力池 (完美覆蓋版)
+# V181-2026 戰力池 (半導體設備、光通訊、IP股 擴充版)
 STRATEGIC_POOL = {
     'CRYPTO': [
+        # --- 主流與公鏈 ---
         'BTC-USD', 'ETH-USD', 'SOL-USD', 'BNB-USD', 
-        'DOGE-USD', 'SHIB-USD', 
-        'PEPE24478-USD', 'APT-USD', 'NEAR-USD', 'SUI-USD', # 公鏈新星
-        'FET-USD', 'RENDER-USD', 'WLD-USD', 'TAO-USD',     # AI Crypto 龍頭
-        'LINK-USD', 'AVAX-USD'
+        'APT-USD', 'NEAR-USD', 'SUI-USD', 'AVAX-USD',
+        'CNTN-USD',  # Canton Network
+        'HYPE-USD',  # Hyperliquid
+        
+        # --- AI 賽道 ---
+        'FET-USD', 'RENDER-USD', 'WLD-USD', 'TAO-USD',
+        'LINK-USD', 
+
+        # --- 迷因 (Memes) ---
+        'DOGE-USD', 'SHIB-USD', 'PEPE24478-USD', 
+        'BONK-USD',
+        
+        # --- 老牌支付/隱私 (Old School) ---
+        'BCH-USD', 'ZEC-USD', 'DASH-USD'
     ],
     'LEVERAGE': [
         'NVDL', 'SOXL', 'TQQQ', 'FNGU', 'TSLL', 
         'CONL', 'BITU', 'USD', 'TECL',
-        'MSTU', # 2倍 MSTR (比特幣核彈)
-        'LABU'  # 3倍生技 (降息循環黑馬)
+        'MSTU', # 2倍 MSTR
+        'LABU'  # 3倍生技
     ],
     'US_STOCKS': [
+        # --- AI 與 科技巨頭 ---
         'NVDA', 'AMD', 'TSLA', 'PLTR', 'MSTR', 'COIN',
         'SMCI', 'ARM', 'AVGO', 'META', 'AMZN', 'NFLX', 
         'LLY', 'VRTX', 'CRWD', 'PANW', 'ORCL', 'SHOP',
@@ -36,13 +48,41 @@ STRATEGIC_POOL = {
         'IONQ', 'RGTI', # 量子計算
         'RKLB', # 太空經濟
         'VRT', 'ANET', 'SNOW', 'COST',
-        'VST'   # AI 電力/核能
+        'VST',   # AI 電力/核能
+        
+        # --- 新增: 半導體設備與記憶體 ---
+        'MU',   # 美光 (記憶體)
+        'AMAT', # 應用材料 (設備)
+        'LRCX', # 科林研發 (設備)
+        'ASML', # 艾斯摩爾 (光刻機)
+        'KLAC', # 科磊 (檢測設備)
+        'GLW'   # 康寧 (光通訊材料)
     ],
     'TW_STOCKS': [
-        '2330.TW', '2454.TW', '2317.TW', '2382.TW',
-        '3231.TW', '6669.TW', '3017.TW',
-        '1519.TW', '1503.TW', # 重電
-        '2603.TW', '2609.TW'  # 航運
+        # --- 權值與組裝 ---
+        '2330.TW', # 台積電
+        '2454.TW', # 聯發科
+        '2317.TW', # 鴻海
+        '2382.TW', # 廣達
+        '3231.TW', # 緯創
+        '6669.TW', # 緯穎
+        '2603.TW', '2609.TW', # 航運
+        
+        # --- 散熱與重電 ---
+        '3017.TW', # 奇鋐
+        '1519.TW', # 華城
+        '1503.TW', # 士電
+        '8996.TW', # 高力 (熱能處理/散熱)
+        
+        # --- 新增: IP、光通訊、設備、測試 ---
+        '8299.TW', # 群聯 (NAND控制IC)
+        '3529.TW', # 力旺 (矽智財 IP)
+        '6515.TW', # 穎崴 (測試介面)
+        '6442.TW', # 光聖 (光通訊)
+        '3081.TW', # 聯亞 (矽光子)
+        '6739.TW', # 竹陞科技 (半導體設備)
+        '6139.TW', # 亞翔 (廠務工程)
+        '6683.TW'  # 雍智科技 (探針卡)
     ]
 }
 
@@ -78,11 +118,36 @@ def calculate_indicators(df):
     return df.iloc[-1]
 
 def load_portfolio():
-    """讀取 GitHub 上的 portfolio.csv 並自動修正代碼"""
+    """
+    讀取 GitHub 上的 portfolio.csv 並自動修正代碼
+    支援:
+    1. 特殊別名: PEPE -> PEPE24478-USD, RNDR -> RENDER-USD, CANTON -> CNTN-USD
+    2. 通用Crypto: BTC -> BTC-USD (自動比對戰力池)
+    3. 台股: 1503 -> 1503.TW
+    """
     holdings = {}
     if not os.path.exists(PORTFOLIO_FILE):
         print("⚠️ 找不到 portfolio.csv，假設為空手。")
         return holdings
+
+    # 建立動態 Crypto 對照表
+    crypto_map = {}
+    for c in STRATEGIC_POOL['CRYPTO']:
+        if c.endswith('-USD'):
+            short_name = c.split('-')[0]
+            crypto_map[short_name] = c
+
+    # 建立特殊別名 (手動指定)
+    alias_map = {
+        'PEPE': 'PEPE24478-USD',
+        'RNDR': 'RENDER-USD',
+        'CANTON': 'CNTN-USD',
+        'BONK': 'BONK-USD',
+        'HYPE': 'HYPE-USD',
+        'ZEC': 'ZEC-USD',
+        'BCH': 'BCH-USD',
+        'DASH': 'DASH-USD'
+    }
 
     try:
         with open(PORTFOLIO_FILE, mode='r', encoding='utf-8') as f:
@@ -90,14 +155,20 @@ def load_portfolio():
             for row in reader:
                 if not row or len(row) < 2: continue
                 
-                # 1. 讀取與清理
                 raw_symbol = row[0].strip().upper()
+                symbol = raw_symbol
                 
-                # 2. 智能修正代碼邏輯
-                if raw_symbol.isdigit() and len(raw_symbol) == 4:
+                # A. 優先檢查特殊別名
+                if raw_symbol in alias_map:
+                    symbol = alias_map[raw_symbol]
+                
+                # B. 台股修正
+                elif raw_symbol.isdigit() and len(raw_symbol) == 4:
                     symbol = f"{raw_symbol}.TW"
-                else:
-                    symbol = raw_symbol
+                
+                # C. 通用 Crypto 修正
+                elif raw_symbol in crypto_map:
+                    symbol = crypto_map[raw_symbol]
                 
                 try:
                     cost = float(row[1].strip())
@@ -152,12 +223,11 @@ def make_decision():
     sells = []
     keeps = []
     
-    # B. 檢查現有持倉 (賣出/續抱邏輯)
+    # B. 檢查現有持倉
     if portfolio:
         print(f"🔍 檢查持倉: {list(portfolio.keys())}")
         try:
             tickers = list(portfolio.keys())
-            # 多下載一些數據以防萬一
             data = yf.download(tickers, period="200d", progress=False, auto_adjust=True)
             
             if isinstance(data.columns, pd.MultiIndex): closes = data['Close']
@@ -190,12 +260,16 @@ def make_decision():
                     else:
                         # 計算建議
                         profit = (price - entry) / entry if entry > 0 else 0
+                        
+                        # 基礎防守價：季線 或 20%移動止損 取高者
                         stop_suggest = max(price * 0.8, ma50)
                         
                         note = "續抱"
+                        # 優先順序 1: 拋物線收割 (RSI > 80) -> 收緊至 10%
                         if rsi > 80:
                             note = "🔥 過熱 (請收緊停利至10%)"
                             stop_suggest = max(stop_suggest, price * 0.9)
+                        # 優先順序 2: 獲利鎖定 (Profit > 50%) -> 鎖定成本+20%
                         elif profit > 0.5:
                             note = "🔒 獲利>50% (請鎖定利潤)"
                             stop_suggest = max(stop_suggest, entry * 1.2)
@@ -210,7 +284,7 @@ def make_decision():
         except Exception as e:
             print(f"下載持倉數據失敗: {e}")
 
-    # C. 掃描新機會 (買入邏輯)
+    # C. 掃描新機會
     current_slots = len(keeps) 
     buys = []
     candidates = []
@@ -297,7 +371,7 @@ def generate_message(regime, sells, keeps, buys, top_list, spy, btc, tw):
         
     msg += "━━━━━━━━━━━━━━\n"
     
-    # 2. 持倉監控 (修正顯示現價)
+    # 2. 持倉監控
     if keeps:
         msg += "🛡️ **【持倉監控】**\n"
         for x in keeps:
@@ -308,7 +382,6 @@ def generate_message(regime, sells, keeps, buys, top_list, spy, btc, tw):
             if "過熱" in x['Note']:
                 display_stop = max(display_stop, x['Price'] * 0.9)
             
-            # 這裡加入了現價顯示 (Now: xxx)
             msg += f"{emoji} {x['Symbol']} (Now: {x['Price']:.2f} | {profit:+.1f}%)\n"
             msg += f"   狀態: {x['Note']}\n"
             msg += f"   防守價: {display_stop:.2f}\n"
