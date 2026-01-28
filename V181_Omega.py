@@ -94,7 +94,6 @@ def load_portfolio():
                 raw_symbol = row[0].strip().upper()
                 
                 # 2. 智能修正代碼邏輯
-                # 如果是純數字且長度為4 (如 1503, 2330)，自動補上 .TW
                 if raw_symbol.isdigit() and len(raw_symbol) == 4:
                     symbol = f"{raw_symbol}.TW"
                 else:
@@ -105,7 +104,6 @@ def load_portfolio():
                 except ValueError:
                     cost = 0.0
                 
-                # 簡單過濾掉標題行 (如果有的話)
                 if 'SYMBOL' in symbol: continue
                 
                 holdings[symbol] = {"entry_price": cost}
@@ -147,41 +145,36 @@ def analyze_market_regime():
 # 3. 決策引擎 (實戰版)
 # ==========================================
 def make_decision():
-    # A. 載入資料
     portfolio = load_portfolio()
     regime, spy, btc, tw = analyze_market_regime()
     
     sells = []
     keeps = []
     
-    # B. 檢查現有持倉 (賣出/續抱邏輯)
+    # B. 檢查現有持倉
     if portfolio:
         print(f"🔍 檢查持倉: {list(portfolio.keys())}")
         try:
             tickers = list(portfolio.keys())
-            # 多下載一些數據以防萬一
             data = yf.download(tickers, period="200d", progress=False, auto_adjust=True)
             
             if isinstance(data.columns, pd.MultiIndex): closes = data['Close']
             else: closes = data
-            # 單一股票修正
             if len(tickers) == 1: closes = pd.DataFrame({tickers[0]: data['Close']})
 
             for symbol in tickers:
                 try:
                     series = closes[symbol].dropna()
                     if len(series) < 60: 
-                        print(f"⚠️ {symbol} 數據不足，可能是代碼錯誤")
+                        print(f"⚠️ {symbol} 數據不足")
                         continue
                     
-                    # 計算指標
                     curr_row = calculate_indicators(pd.DataFrame({'Close': series}))
                     price = curr_row['Close']
                     ma50 = curr_row['MA50']
                     
                     entry = portfolio[symbol]['entry_price']
                     
-                    # 賣出條件 (V181 核心)
                     reason = ""
                     if price < ma50:
                         reason = "❌ 跌破季線 (MA50)"
@@ -191,11 +184,9 @@ def make_decision():
                     if reason:
                         sells.append({'Symbol': symbol, 'Price': price, 'Reason': reason})
                     else:
-                        # 計算建議
                         profit = (price - entry) / entry if entry > 0 else 0
-                        stop_suggest = max(price * 0.8, ma50) # 建議止損位
+                        stop_suggest = max(price * 0.8, ma50)
                         
-                        # 檢查是否過熱
                         rsi = curr_row['RSI']
                         note = "續抱"
                         if rsi > 80: note = "🔥 過熱 (請收緊停利至10%)"
@@ -211,13 +202,11 @@ def make_decision():
         except Exception as e:
             print(f"下載持倉數據失敗: {e}")
 
-    # C. 掃描新機會 (買入邏輯)
-    # 持倉數計算：只計算續抱的
-    current_holdings_count = len(keeps)
+    # C. 掃描新機會
+    current_slots = len(keeps) 
     buys = []
     candidates = []
     
-    # 只有當有空位時才掃描，節省資源
     all_tickers = []
     for cat in STRATEGIC_POOL: all_tickers.extend(STRATEGIC_POOL[cat])
     
@@ -236,8 +225,6 @@ def make_decision():
                     df_t = pd.DataFrame({'Close': series})
                     row = calculate_indicators(df_t)
                     
-                    # 買入篩選 V181
-                    # 多頭排列 + RSI不過熱
                     if row['Close'] > row['MA20'] and row['MA20'] > row['MA50'] and row['RSI'] < 80:
                         candidates.append({
                             'Symbol': symbol,
@@ -248,16 +235,13 @@ def make_decision():
                         })
                 except: continue
         
-        # 排名
         candidates.sort(key=lambda x: x['Score'], reverse=True)
         
-        # 填補空缺
         slots_needed = 3 - current_slots
         if slots_needed > 0:
             for cand in candidates:
                 if len(buys) >= slots_needed: break
                 
-                # 不買已經持有的
                 is_held = False
                 for k in keeps:
                     if k['Symbol'] == cand['Symbol']: is_held = True
@@ -277,7 +261,6 @@ def generate_message(regime, sells, keeps, buys, top_list, spy, btc, tw):
     msg = f"🤖 **V181 實戰管家**\n{datetime.now().strftime('%Y-%m-%d')}\n"
     msg += "━━━━━━━━━━━━━━\n"
     
-    # 1. 關鍵指令
     msg += "📢 **【今日操作指令】**\n"
     has_action = False
     
@@ -290,7 +273,6 @@ def generate_message(regime, sells, keeps, buys, top_list, spy, btc, tw):
     if buys:
         msg += "🟢 **買進 (請執行並寫入CSV):**\n"
         for x in buys:
-            # 判斷倉位大小
             size_hint = "滿倉"
             if x['Type'] == 'LEVERAGE' and not regime['US_BULL']: size_hint = "⚠️半倉"
             if x['Type'] == 'CRYPTO' and not regime['CRYPTO_BULL']: size_hint = "⚠️半倉"
@@ -304,7 +286,6 @@ def generate_message(regime, sells, keeps, buys, top_list, spy, btc, tw):
         
     msg += "━━━━━━━━━━━━━━\n"
     
-    # 2. 持倉監控
     if keeps:
         msg += "🛡️ **【持倉監控】**\n"
         for x in keeps:
@@ -318,11 +299,19 @@ def generate_message(regime, sells, keeps, buys, top_list, spy, btc, tw):
 
     msg += "━━━━━━━━━━━━━━\n"
     
-    # 3. 市場概況
     msg += "🌍 **【大盤與動能王】**\n"
+    # 修正顯示格式，避免 N/A
+    spy_disp = f"{spy:.0f}" if spy > 0 else "N/A"
+    btc_disp = f"{btc:.0f}" if btc > 0 else "N/A"
+    tw_disp = f"{tw:.0f}" if tw > 0 else "N/A"
+    
     spy_icon = "🟢" if regime['US_BULL'] else "🔴"
     btc_icon = "🟢" if regime['CRYPTO_BULL'] else "🔴"
-    msg += f"美{spy_icon} {spy:.0f} | 幣{btc_icon} {btc:.0f}\n"
+    tw_icon = "🟢" if regime['TW_BULL'] else "🔴"
+
+    # 修正：補上台股顯示
+    msg += f"美{spy_icon} {spy_disp} | 幣{btc_icon} {btc_disp}\n"
+    msg += f"台{tw_icon} {tw_disp}\n"
     msg += "--------------------\n"
     rank = 1
     for x in top_list[:3]:
