@@ -14,6 +14,7 @@ LINE_USER_ID = os.getenv('LINE_USER_ID')
 PORTFOLIO_FILE = 'portfolio.csv'
 
 # V196 全明星戰力池 (含權重設定)
+# 更新註記: MATIC->POL, 移除 HYPE (YF無數據)
 STRATEGIC_POOL = {
     'CRYPTO': [ # 權重 1.4x
         'BTC-USD', 'ETH-USD', 'SOL-USD', 'BNB-USD', 'AVAX-USD',
@@ -123,7 +124,6 @@ def load_portfolio():
             reader = csv.reader(f)
             try:
                 header = next(reader)
-                # 簡單檢查第一欄是否為標題
                 if not header or 'Symbol' not in header[0]:
                     pass 
                 
@@ -132,7 +132,6 @@ def load_portfolio():
                     symbol = normalize_symbol(row[0])
                     try:
                         entry_price = float(row[1])
-                        # 如果有紀錄最高價就讀取，沒有就設為進場價
                         high_price = float(row[2]) if len(row) > 2 and row[2] else entry_price
                         
                         holdings[symbol] = {
@@ -339,20 +338,30 @@ def analyze_market():
             keeps = [k for k in keeps if k != worst_holding]
             sells.append({'Symbol': worst_holding['Symbol'], 'Price': worst_holding['Price'], 'Reason': "💀 弒君被換", 'PnL': f"{worst_holding['Profit']*100:.1f}%"})
             
-    # 6. 空位買入 (修正版：扣除換馬佔位)
+    # 6. 空位買入 (修正版：扣除換馬佔位 + 備選名單)
     buys = []
     open_slots = MAX_TOTAL_POSITIONS - len(keeps) - len(swaps)
     
     swap_buy_symbols = [s['Buy']['Symbol'] for s in swaps]
     available_candidates = [c for c in candidates if c['Symbol'] not in swap_buy_symbols]
     
-    if open_slots > 0 and available_candidates:
-        for i in range(min(open_slots, len(available_candidates))):
+    # 計算需要推薦的總數：空位數 + 1 (作為備選)
+    # 如果有空位，至少推薦 2 檔 (除非只有 1 檔候選)
+    num_recommendations = 0
+    if open_slots > 0:
+        num_recommendations = open_slots + 1
+    
+    if num_recommendations > 0 and available_candidates:
+        for i in range(min(num_recommendations, len(available_candidates))):
             cand = available_candidates[i]
+            # 如果是最後一檔且超過了空位數，標記為備選
+            is_backup = (i >= open_slots)
+            
             buys.append({
                 'Symbol': cand['Symbol'],
                 'Price': cand['Price'],
-                'Score': cand['Score']
+                'Score': cand['Score'],
+                'IsBackup': is_backup
             })
 
     return regime, sells, keeps, buys, swaps
@@ -416,9 +425,13 @@ def format_message(regime, sells, keeps, buys, swaps):
     if buys:
         msg += "🟢 **【買入指令】**\n"
         for b in buys:
-            msg += f"💰 {b['Symbol']} @ {b['Price']:.2f}\n"
-            msg += f"   評分: {b['Score']:.2f}\n"
-            msg += f"   🔔 記得設定: 移動止損 25%\n"
+            if b.get('IsBackup', False):
+                msg += f"✨ {b['Symbol']} @ {b['Price']:.2f} (備選)\n"
+                msg += f"   評分: {b['Score']:.2f}\n"
+            else:
+                msg += f"💰 {b['Symbol']} @ {b['Price']:.2f} (首選)\n"
+                msg += f"   評分: {b['Score']:.2f}\n"
+                msg += f"   🔔 記得設定: 移動止損 25%\n"
         msg += "--------------------\n"
 
     # 持倉監控
