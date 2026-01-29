@@ -14,14 +14,15 @@ LINE_USER_ID = os.getenv('LINE_USER_ID')
 PORTFOLIO_FILE = 'portfolio.csv'
 
 # V196 全明星戰力池 (含權重設定)
+# 更新註記: MATIC->POL, 移除 HYPE (YF無數據)
 STRATEGIC_POOL = {
     'CRYPTO': [ # 權重 1.4x
         'BTC-USD', 'ETH-USD', 'SOL-USD', 'BNB-USD', 'AVAX-USD',
-        'DOGE-USD', 'SHIB-USD', 'MATIC-USD', 'LINK-USD', 'LTC-USD',
+        'DOGE-USD', 'SHIB-USD', 'POL-USD', 'LINK-USD', 'LTC-USD',
         'SAND-USD', 'AXS-USD', 'LUNC-USD', 'FTT-USD', 
         'PEPE24478-USD', 'APT-USD', 'NEAR-USD', 'SUI20947-USD',
         'FET-USD', 'RENDER-USD', 'WLD-USD', 'TAO22974-USD',
-        'BONK-USD', 'HYPE-USD'
+        'BONK-USD'
     ],
     'LEVERAGE': [ # 權重 1.5x
         'NVDL', 'SOXL', 'TQQQ', 'FNGU', 'TSLL', 
@@ -88,7 +89,8 @@ def normalize_symbol(raw_symbol):
         'BONK': 'BONK-USD', 'FLOKI': 'FLOKI-USD', 'WIF': 'WIF-USD',
         'RNDR': 'RENDER-USD', 'RENDER': 'RENDER-USD',
         'TAO': 'TAO22974-USD', 'SUI': 'SUI20947-USD',
-        'HYPE': 'HYPE-USD', 'WLD': 'WLD-USD', 'FET': 'FET-USD'
+        'HYPE': 'HYPE-USD', 'WLD': 'WLD-USD', 'FET': 'FET-USD',
+        'MATIC': 'POL-USD', 'POL': 'POL-USD' # Polygon 換幣修正
     }
     if raw_symbol in alias_map: return alias_map[raw_symbol]
     
@@ -122,21 +124,35 @@ def load_portfolio():
     try:
         with open(PORTFOLIO_FILE, mode='r', encoding='utf-8-sig') as f:
             reader = csv.reader(f)
-            headers = next(reader, None) # 跳過標題
-            for row in reader:
-                if not row or len(row) < 2: continue
-                symbol = normalize_symbol(row[0])
-                try:
-                    entry_price = float(row[1])
-                    # 如果有紀錄最高價就讀取，沒有就設為進場價
-                    high_price = float(row[2]) if len(row) > 2 and row[2] else entry_price
-                    
-                    holdings[symbol] = {
-                        'entry_price': entry_price,
-                        'high_price': high_price
-                    }
-                except ValueError:
-                    print(f"⚠️ 無法解析持倉數據: {row}")
+            # 嘗試讀取第一行，如果是標題就跳過，如果不是標題(是數據)就回退
+            try:
+                header = next(reader)
+                # 簡單檢查第一欄是否為 'Symbol' 或類似標題
+                if not header or 'Symbol' not in header[0]:
+                    # 如果不是標題，這裡假設使用者沒加標題，直接報錯或跳過可能會有問題
+                    # 但為了相容性，建議使用者務必加標題
+                    pass 
+                
+                # 繼續讀取剩下的行
+                for row in reader:
+                    if not row or len(row) < 2: continue
+                    symbol = normalize_symbol(row[0])
+                    try:
+                        entry_price = float(row[1])
+                        # 如果有紀錄最高價就讀取，沒有就設為進場價
+                        high_price = float(row[2]) if len(row) > 2 and row[2] else entry_price
+                        
+                        holdings[symbol] = {
+                            'entry_price': entry_price,
+                            'high_price': high_price
+                        }
+                    except ValueError:
+                        continue # 跳過無法解析的行
+                        
+            except StopIteration:
+                pass # 空文件
+
+        print(f"📋 已讀取持倉監控名單: {list(holdings.keys())}")
         return holdings
     except Exception as e:
         print(f"❌ 讀取 CSV 失敗: {e}")
@@ -172,6 +188,9 @@ def analyze_market():
     all_tickers = list(set(BENCHMARKS + list(portfolio.keys()) + 
                            [t for cat in STRATEGIC_POOL for t in STRATEGIC_POOL[cat]]))
     
+    # 移除 HYPE 避免下載錯誤
+    if 'HYPE-USD' in all_tickers: all_tickers.remove('HYPE-USD')
+
     print(f"📥 下載 {len(all_tickers)} 檔標的數據...")
     try:
         data = yf.download(all_tickers, period="250d", progress=False, auto_adjust=True)
@@ -239,12 +258,26 @@ def analyze_market():
         trail_limit = 0.75
         if profit_pct > 1.0: trail_limit = 0.80
         
+        # 計算防守價位以便顯示
+        hard_stop_price = entry_price * 0.70
+        trail_stop_price = high_price * trail_limit
+        
+        # 決定當前生效的防守價 (取最高者)
+        active_stop_price = max(hard_stop_price, trail_stop_price)
+        
+        # 決定防守說明文字
+        stop_info = ""
+        if active_stop_price == hard_stop_price:
+            stop_info = "硬損-30%"
+        else:
+            stop_info = f"高點-{int((1-trail_limit)*100)}%"
+
         if is_winter:
             reason = "❄️ 分區冬眠 (清倉)"
-        elif curr_price < entry_price * 0.70:
+        elif curr_price < hard_stop_price:
             reason = "🔴 深淵止損 (-30%)"
-        elif curr_price < high_price * trail_limit:
-            reason = f"🛡️ 移動停利 (高點回撤{round((1-trail_limit)*100)}%)"
+        elif curr_price < trail_stop_price:
+            reason = f"🛡️ 移動停利 ({stop_info})"
         elif curr_price < row['MA50']:
              reason = "❌ 跌破季線"
         
@@ -261,7 +294,8 @@ def analyze_market():
             
             keeps.append({
                 'Symbol': symbol, 'Price': curr_price, 'Score': final_score, 
-                'Profit': profit_pct, 'Stop': max(entry_price*0.7, high_price*trail_limit)
+                'Profit': profit_pct, 'Stop': active_stop_price, 
+                'StopInfo': stop_info # 新增欄位給顯示用
             })
 
     # 4. 掃描機會 (Buy Check)
@@ -275,6 +309,9 @@ def analyze_market():
         valid_pool += STRATEGIC_POOL['LEVERAGE']
     if regime['TW_BULL']: valid_pool += STRATEGIC_POOL['TW_STOCKS']
     
+    # 移除暫時無法獲取的
+    if 'HYPE-USD' in valid_pool: valid_pool.remove('HYPE-USD')
+
     for t in valid_pool:
         if t in portfolio or t not in closes.columns: continue
         
@@ -408,7 +445,8 @@ def format_message(regime, sells, keeps, buys, swaps):
             pnl = k['Profit'] * 100
             emoji = "😍" if pnl > 20 else "🤢" if pnl < 0 else "😐"
             msg += f"{emoji} {k['Symbol']}: {pnl:+.1f}%\n"
-            msg += f"   防守: {k['Stop']:.2f} (S:{k['Score']:.1f})\n"
+            # 顯示防守價與停利百分比
+            msg += f"   防守: {k['Stop']:.2f} ({k['StopInfo']})\n"
     else:
         msg += "☕ 目前空手\n"
 
