@@ -14,7 +14,6 @@ LINE_USER_ID = os.getenv('LINE_USER_ID')
 PORTFOLIO_FILE = 'portfolio.csv'
 
 # V196 全明星戰力池 (含權重設定)
-# 更新註記: MATIC->POL, 移除 HYPE (YF無數據)
 STRATEGIC_POOL = {
     'CRYPTO': [ # 權重 1.4x
         'BTC-USD', 'ETH-USD', 'SOL-USD', 'BNB-USD', 'AVAX-USD',
@@ -53,6 +52,9 @@ TIER_1_ASSETS = [
 
 # 基準指標
 BENCHMARKS = ['^GSPC', 'BTC-USD', '^TWII']
+
+# 座位設定
+MAX_TOTAL_POSITIONS = 4
 
 # ==========================================
 # 2. 輔助函式
@@ -95,7 +97,6 @@ def normalize_symbol(raw_symbol):
     if raw_symbol in alias_map: return alias_map[raw_symbol]
     
     # 2. 台灣股票 (.TW / .TWO)
-    # 簡單判斷：如果是4位數字，先假設是 .TW，除非在特定的上櫃名單中
     otc_list = ['8299', '3529', '3081', '6739', '6683', '8069', '3293', '3661'] 
     if raw_symbol.isdigit() and len(raw_symbol) == 4:
         if raw_symbol in otc_list: return f"{raw_symbol}.TWO"
@@ -104,7 +105,6 @@ def normalize_symbol(raw_symbol):
     # 3. 加密貨幣 (沒有 -USD 的自動補上)
     known_crypto = set([c.split('-')[0] for c in STRATEGIC_POOL['CRYPTO']])
     if raw_symbol in known_crypto:
-        # 檢查是否在特殊對映中，否則直接加 -USD
         for k, v in alias_map.items():
             if raw_symbol == k: return v
         return f"{raw_symbol}-USD"
@@ -112,10 +112,7 @@ def normalize_symbol(raw_symbol):
     return raw_symbol
 
 def load_portfolio():
-    """
-    讀取 portfolio.csv
-    格式: Symbol, EntryPrice, HighPrice(可選)
-    """
+    """讀取 portfolio.csv"""
     holdings = {}
     if not os.path.exists(PORTFOLIO_FILE):
         print("⚠️ 找不到 portfolio.csv，假設目前空手。")
@@ -124,16 +121,12 @@ def load_portfolio():
     try:
         with open(PORTFOLIO_FILE, mode='r', encoding='utf-8-sig') as f:
             reader = csv.reader(f)
-            # 嘗試讀取第一行，如果是標題就跳過，如果不是標題(是數據)就回退
             try:
                 header = next(reader)
-                # 簡單檢查第一欄是否為 'Symbol' 或類似標題
+                # 簡單檢查第一欄是否為標題
                 if not header or 'Symbol' not in header[0]:
-                    # 如果不是標題，這裡假設使用者沒加標題，直接報錯或跳過可能會有問題
-                    # 但為了相容性，建議使用者務必加標題
                     pass 
                 
-                # 繼續讀取剩下的行
                 for row in reader:
                     if not row or len(row) < 2: continue
                     symbol = normalize_symbol(row[0])
@@ -147,10 +140,10 @@ def load_portfolio():
                             'high_price': high_price
                         }
                     except ValueError:
-                        continue # 跳過無法解析的行
+                        continue 
                         
             except StopIteration:
-                pass # 空文件
+                pass 
 
         print(f"📋 已讀取持倉監控名單: {list(holdings.keys())}")
         return holdings
@@ -159,13 +152,12 @@ def load_portfolio():
         return {}
 
 def update_portfolio_csv(holdings, current_prices):
-    """更新 CSV 中的最高價 (HighPrice) 欄位，用於移動停利"""
+    """更新 CSV 中的最高價"""
     try:
         data_to_write = []
         for symbol, data in holdings.items():
             curr_p = current_prices.get(symbol, 0)
             if curr_p > 0:
-                # 更新歷史最高價
                 new_high = max(data['high_price'], curr_p)
                 data_to_write.append([symbol, data['entry_price'], new_high])
             else:
@@ -173,7 +165,7 @@ def update_portfolio_csv(holdings, current_prices):
         
         with open(PORTFOLIO_FILE, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
-            writer.writerow(['Symbol', 'EntryPrice', 'HighPrice']) # Header
+            writer.writerow(['Symbol', 'EntryPrice', 'HighPrice'])
             writer.writerows(data_to_write)
         print("✅ Portfolio 最高價已更新")
     except Exception as e:
@@ -188,7 +180,7 @@ def analyze_market():
     all_tickers = list(set(BENCHMARKS + list(portfolio.keys()) + 
                            [t for cat in STRATEGIC_POOL for t in STRATEGIC_POOL[cat]]))
     
-    # 移除 HYPE 避免下載錯誤
+    # 移除 HYPE
     if 'HYPE-USD' in all_tickers: all_tickers.remove('HYPE-USD')
 
     print(f"📥 下載 {len(all_tickers)} 檔標的數據...")
@@ -211,9 +203,10 @@ def analyze_market():
         regime['US_BULL'] = spy_last > spy_ma200
         regime['TW_BULL'] = regime['US_BULL'] # 台股連動美股
     else:
-        regime['US_BULL'] = True # 數據不足預設多頭
+        regime['US_BULL'] = True
+        regime['TW_BULL'] = True
 
-    # 幣圈看 BTC 100日線 (V196 特色)
+    # 幣圈看 BTC 100日線
     btc_series = closes.get('BTC-USD')
     if btc_series is not None:
         btc_last = btc_series.iloc[-1]
@@ -224,7 +217,7 @@ def analyze_market():
 
     current_prices = {t: closes[t].iloc[-1] for t in all_tickers if t in closes.columns}
     
-    # 更新 CSV 中的 HighPrice
+    # 更新 CSV
     update_portfolio_csv(portfolio, current_prices)
 
     # 3. 掃描持倉 (Sell Check)
@@ -240,7 +233,7 @@ def analyze_market():
         row = calculate_indicators(pd.DataFrame({'Close': series}))
         curr_price = row['Close']
         entry_price = data['entry_price']
-        high_price = max(data['high_price'], curr_price) # 取用 CSV 紀錄或當前價
+        high_price = max(data['high_price'], curr_price)
         
         atype = get_asset_type(symbol)
         
@@ -250,22 +243,18 @@ def analyze_market():
         elif atype in ['US_STOCK', 'LEVERAGE'] and not regime['US_BULL']: is_winter = True
         elif atype == 'TW' and not regime['TW_BULL']: is_winter = True
         
-        # B. 停損停利檢查 (V196 參數)
+        # B. 停損停利檢查
         reason = ""
         profit_pct = (curr_price - entry_price) / entry_price
         
-        # 移動停利: 預設 25% 回撤，翻倍後收緊至 20%
+        # 移動停利: 預設 25% 回撤
         trail_limit = 0.75
         if profit_pct > 1.0: trail_limit = 0.80
         
-        # 計算防守價位以便顯示
         hard_stop_price = entry_price * 0.70
         trail_stop_price = high_price * trail_limit
-        
-        # 決定當前生效的防守價 (取最高者)
         active_stop_price = max(hard_stop_price, trail_stop_price)
         
-        # 決定防守說明文字
         stop_info = ""
         if active_stop_price == hard_stop_price:
             stop_info = "硬損-30%"
@@ -284,7 +273,6 @@ def analyze_market():
         if reason:
             sells.append({'Symbol': symbol, 'Price': curr_price, 'Reason': reason, 'PnL': f"{profit_pct*100:.1f}%"})
         else:
-            # 弒君分數計算
             score = row['Momentum']
             multiplier = 1.0
             if symbol in TIER_1_ASSETS: multiplier = 1.2
@@ -295,13 +283,12 @@ def analyze_market():
             keeps.append({
                 'Symbol': symbol, 'Price': curr_price, 'Score': final_score, 
                 'Profit': profit_pct, 'Stop': active_stop_price, 
-                'StopInfo': stop_info # 新增欄位給顯示用
+                'StopInfo': stop_info
             })
 
     # 4. 掃描機會 (Buy Check)
     candidates = []
     
-    # 只掃描符合多頭條件的板塊
     valid_pool = []
     if regime['CRYPTO_BULL']: valid_pool += STRATEGIC_POOL['CRYPTO']
     if regime['US_BULL']: 
@@ -309,7 +296,6 @@ def analyze_market():
         valid_pool += STRATEGIC_POOL['LEVERAGE']
     if regime['TW_BULL']: valid_pool += STRATEGIC_POOL['TW_STOCKS']
     
-    # 移除暫時無法獲取的
     if 'HYPE-USD' in valid_pool: valid_pool.remove('HYPE-USD')
 
     for t in valid_pool:
@@ -320,14 +306,12 @@ def analyze_market():
         
         row = calculate_indicators(pd.DataFrame({'Close': series}))
         
-        # 趨勢過濾: 價格 > 20 > 50 > 60
         if not (row['Close'] > row['MA20'] and row['MA20'] > row['MA50'] and row['Close'] > row['MA60']):
             continue
             
         raw_score = row['Momentum']
         if pd.isna(raw_score) or raw_score <= 0: continue
         
-        # 暴力加權
         multiplier = 1.0
         atype = get_asset_type(t)
         if t in TIER_1_ASSETS: multiplier = 1.2
@@ -336,32 +320,29 @@ def analyze_market():
         
         final_score = raw_score * multiplier
         
-        candidates.append({'Symbol': t, 'Price': row['Close'], 'Score': final_score, 'RawMom': raw_score})
+        candidates.append({'Symbol': t, 'Price': row['Close'], 'Score': final_score})
         
     candidates.sort(key=lambda x: x['Score'], reverse=True)
     
-    # 5. 弒君檢查 (King Slayer)
+    # 5. 弒君檢查
     swaps = []
     if keeps and candidates:
         worst_holding = min(keeps, key=lambda x: x['Score'])
         best_candidate = candidates[0]
         
-        # 如果場外最強 > 場內最弱 * 1.5倍
         if best_candidate['Score'] > worst_holding['Score'] * 1.5:
             swaps.append({
                 'Sell': worst_holding,
                 'Buy': best_candidate,
                 'Reason': f"💀 弒君換馬 (評分 {best_candidate['Score']:.2f} vs {worst_holding['Score']:.2f})"
             })
-            # 移除被換掉的，避免重複推薦
             keeps = [k for k in keeps if k != worst_holding]
             sells.append({'Symbol': worst_holding['Symbol'], 'Price': worst_holding['Price'], 'Reason': "💀 弒君被換", 'PnL': f"{worst_holding['Profit']*100:.1f}%"})
             
-    # 6. 空位買入
+    # 6. 空位買入 (修正版：扣除換馬佔位)
     buys = []
-    open_slots = 4 - len(keeps) # V196 固定 4 席
+    open_slots = MAX_TOTAL_POSITIONS - len(keeps) - len(swaps)
     
-    # 扣除掉已經在 Swap 名單中的候選人
     swap_buy_symbols = [s['Buy']['Symbol'] for s in swaps]
     available_candidates = [c for c in candidates if c['Symbol'] not in swap_buy_symbols]
     
@@ -371,8 +352,7 @@ def analyze_market():
             buys.append({
                 'Symbol': cand['Symbol'],
                 'Price': cand['Price'],
-                'Score': cand['Score'],
-                'Reason': f"🦁 新晉獵物 (評分 {cand['Score']:.2f})"
+                'Score': cand['Score']
             })
 
     return regime, sells, keeps, buys, swaps
@@ -408,10 +388,11 @@ def format_message(regime, sells, keeps, buys, swaps):
     msg = f"🦁 **V196 Apex Predator 實戰日報**\n{datetime.now().strftime('%Y-%m-%d')}\n"
     msg += "━━━━━━━━━━━━━━\n"
     
-    # 環境
-    us_icon = "🟢" if regime['US_BULL'] else "❄️"
-    crypto_icon = "🟢" if regime['CRYPTO_BULL'] else "❄️"
-    msg += f"環境: 美股{us_icon} | 幣圈{crypto_icon}\n"
+    # 環境 (新增台股)
+    us_icon = "🟢" if regime.get('US_BULL', False) else "❄️"
+    crypto_icon = "🟢" if regime.get('CRYPTO_BULL', False) else "❄️"
+    tw_icon = "🟢" if regime.get('TW_BULL', False) else "❄️"
+    msg += f"環境: 美{us_icon} | 幣{crypto_icon} | 台{tw_icon}\n"
     msg += "━━━━━━━━━━━━━━\n"
 
     # 賣出指令
@@ -428,6 +409,7 @@ def format_message(regime, sells, keeps, buys, swaps):
         for s in swaps:
             msg += f"OUT: {s['Sell']['Symbol']} ({s['Sell']['Score']:.1f})\n"
             msg += f"IN : {s['Buy']['Symbol']} ({s['Buy']['Score']:.1f})\n"
+            msg += f"   🔔 記得設定: 移動止損 25%\n"
         msg += "--------------------\n"
 
     # 買入指令
@@ -436,6 +418,7 @@ def format_message(regime, sells, keeps, buys, swaps):
         for b in buys:
             msg += f"💰 {b['Symbol']} @ {b['Price']:.2f}\n"
             msg += f"   評分: {b['Score']:.2f}\n"
+            msg += f"   🔔 記得設定: 移動止損 25%\n"
         msg += "--------------------\n"
 
     # 持倉監控
@@ -445,7 +428,6 @@ def format_message(regime, sells, keeps, buys, swaps):
             pnl = k['Profit'] * 100
             emoji = "😍" if pnl > 20 else "🤢" if pnl < 0 else "😐"
             msg += f"{emoji} {k['Symbol']}: {pnl:+.1f}%\n"
-            # 顯示防守價與停利百分比
             msg += f"   防守: {k['Stop']:.2f} ({k['StopInfo']})\n"
     else:
         msg += "☕ 目前空手\n"
