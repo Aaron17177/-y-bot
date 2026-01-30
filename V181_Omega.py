@@ -14,7 +14,6 @@ LINE_USER_ID = os.getenv('LINE_USER_ID')
 PORTFOLIO_FILE = 'portfolio.csv'
 
 # V196 全明星戰力池 (含權重設定)
-# 更新註記: MATIC->POL, 移除 HYPE (YF無數據)
 STRATEGIC_POOL = {
     'CRYPTO': [ # 權重 1.4x
         'BTC-USD', 'ETH-USD', 'SOL-USD', 'BNB-USD', 'AVAX-USD',
@@ -124,6 +123,7 @@ def load_portfolio():
             reader = csv.reader(f)
             try:
                 header = next(reader)
+                # 簡單檢查第一欄是否為標題
                 if not header or 'Symbol' not in header[0]:
                     pass 
                 
@@ -132,6 +132,7 @@ def load_portfolio():
                     symbol = normalize_symbol(row[0])
                     try:
                         entry_price = float(row[1])
+                        # 如果有紀錄最高價就讀取，沒有就設為進場價
                         high_price = float(row[2]) if len(row) > 2 and row[2] else entry_price
                         
                         holdings[symbol] = {
@@ -330,11 +331,17 @@ def analyze_market():
         best_candidate = candidates[0]
         
         if best_candidate['Score'] > worst_holding['Score'] * 1.5:
-            swaps.append({
+            swap_info = {
                 'Sell': worst_holding,
                 'Buy': best_candidate,
                 'Reason': f"💀 弒君換馬 (評分 {best_candidate['Score']:.2f} vs {worst_holding['Score']:.2f})"
-            })
+            }
+            # 如果有次佳選擇，且該選擇不是本次弒君的主角，則作為備選
+            # (避免 buy_candidate 和 backup 是同一隻)
+            if len(candidates) > 1 and candidates[1]['Symbol'] != best_candidate['Symbol']:
+                swap_info['Backup'] = candidates[1]
+                
+            swaps.append(swap_info)
             keeps = [k for k in keeps if k != worst_holding]
             sells.append({'Symbol': worst_holding['Symbol'], 'Price': worst_holding['Price'], 'Reason': "💀 弒君被換", 'PnL': f"{worst_holding['Profit']*100:.1f}%"})
             
@@ -418,6 +425,8 @@ def format_message(regime, sells, keeps, buys, swaps):
         for s in swaps:
             msg += f"OUT: {s['Sell']['Symbol']} ({s['Sell']['Score']:.1f})\n"
             msg += f"IN : {s['Buy']['Symbol']} ({s['Buy']['Score']:.1f})\n"
+            if 'Backup' in s:
+                msg += f"   ✨ 備選: {s['Backup']['Symbol']} ({s['Backup']['Score']:.1f})\n"
             msg += f"   🔔 記得設定: 移動止損 25%\n"
         msg += "--------------------\n"
 
