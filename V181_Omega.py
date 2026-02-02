@@ -23,15 +23,15 @@ PORTFOLIO_FILE = 'portfolio.csv'
 # 4. 普通股票            : 1.0x
 # ==========================================
 
-# V196 全明星戰力池 (優化版)
+# V196 全明星戰力池 (優化版 - 修正 Ticker)
 STRATEGIC_POOL = {
     'CRYPTO': [ 
         'BTC-USD', 'ETH-USD', 'SOL-USD', 'BNB-USD', 'AVAX-USD',
-        'DOGE-USD', 'SHIB-USD', 'POL-USD', 'LINK-USD', 'LTC-USD',
+        'DOGE-USD', 'SHIB-USD', 'MATIC-USD', 'LINK-USD', 'LTC-USD', # POL 改回 MATIC 以獲取歷史數據
         'SAND-USD', 'AXS-USD', 'LUNC-USD', 'FTT-USD', 
         'PEPE24478-USD', 'APT-USD', 'NEAR-USD', 'SUI20947-USD',
         'FET-USD', 'RENDER-USD', 'WLD-USD', 'TAO22974-USD', 'BONK-USD',
-        'WIF-USD', 'TIA-USD', 'STX-USD'
+        'WIF-USD', 'TIA-USD', 'STX4847-USD' # STX 改用 ID 避免與美股衝突
     ],
     'LEVERAGE': [ 
         'NVDL', 'SOXL', 'TQQQ', 'FNGU', 'TSLL', 
@@ -52,7 +52,7 @@ STRATEGIC_POOL = {
         '1519.TW', '1503.TW', '2603.TW', '2609.TW',
         '8996.TW', '6515.TW', '6442.TW', '6139.TW',
         '8299.TWO', '3529.TWO', '3081.TWO', '6739.TWO', '6683.TWO',
-        '2359.TW', '3131.TWO', '3583.TW', '8054.TW'
+        '2359.TW', '3131.TWO', '3583.TW', '8054.TWO' # 修正 8054 為上櫃 .TWO
     ]
 }
 
@@ -98,12 +98,12 @@ def normalize_symbol(raw_symbol):
         'RNDR': 'RENDER-USD', 'RENDER': 'RENDER-USD',
         'TAO': 'TAO22974-USD', 'SUI': 'SUI20947-USD',
         'HYPE': 'HYPE-USD', 'WLD': 'WLD-USD', 'FET': 'FET-USD',
-        'MATIC': 'POL-USD', 'POL': 'POL-USD',
-        'TIA': 'TIA-USD', 'STX': 'STX-USD'
+        'MATIC': 'MATIC-USD', 'POL': 'MATIC-USD', # POL 改回 MATIC-USD
+        'TIA': 'TIA-USD', 'STX': 'STX4847-USD'    # STX 改用 ID
     }
     if raw_symbol in alias_map: return alias_map[raw_symbol]
     
-    otc_list = ['8299', '3529', '3081', '6739', '6683', '8069', '3293', '3661', '3131'] 
+    otc_list = ['8299', '3529', '3081', '6739', '6683', '8069', '3293', '3661', '3131', '8054'] # 加入 8054
     if raw_symbol.isdigit() and len(raw_symbol) == 4:
         if raw_symbol in otc_list: return f"{raw_symbol}.TWO"
         return f"{raw_symbol}.TW"
