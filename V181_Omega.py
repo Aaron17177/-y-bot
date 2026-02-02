@@ -13,40 +13,70 @@ LINE_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
 LINE_USER_ID = os.getenv('LINE_USER_ID')
 PORTFOLIO_FILE = 'portfolio.csv'
 
-# V196 全明星戰力池
+# ==========================================
+# 🏆 V196 加權規則 (由高至低優先級)
+# ==========================================
+# 1. 槓桿 ETF (LEVERAGE) : 1.5x (最高優先，攻擊重心)
+# 2. 加密貨幣 (CRYPTO)   : 1.4x (次高優先，捕捉爆擊)
+# 3. Tier 1 股票         : 1.2x (精銳股票，優先於普通股)
+# 4. 普通股票            : 1.0x (基礎戰力)
+# ==========================================
+
+# V196 全明星戰力池 (優化版)
 STRATEGIC_POOL = {
     'CRYPTO': [ 
+        # 既有主力
         'BTC-USD', 'ETH-USD', 'SOL-USD', 'BNB-USD', 'AVAX-USD',
         'DOGE-USD', 'SHIB-USD', 'POL-USD', 'LINK-USD', 'LTC-USD',
         'SAND-USD', 'AXS-USD', 'LUNC-USD', 'FTT-USD', 
         'PEPE24478-USD', 'APT-USD', 'NEAR-USD', 'SUI20947-USD',
-        'FET-USD', 'RENDER-USD', 'WLD-USD', 'TAO22974-USD',
-        'BONK-USD'
+        'FET-USD', 'RENDER-USD', 'WLD-USD', 'TAO22974-USD', 'BONK-USD',
+        # 🔥 新增潛力妖幣
+        'WIF-USD',  # Solana 迷因龍頭
+        'TIA-USD',  # 模組化區塊鏈
+        'STX-USD'   # 比特幣 L2
     ],
     'LEVERAGE': [ 
+        # 既有主力
         'NVDL', 'SOXL', 'TQQQ', 'FNGU', 'TSLL', 
-        'CONL', 'BITU', 'USD', 'TECL', 'MSTU', 'LABU'
+        'CONL', 'BITU', 'USD', 'TECL', 'MSTU', 'LABU',
+        # 🔥 新增終極槓桿
+        'BITX'      # 2倍比特幣
     ],
     'US_STOCKS': [ 
+        # 既有主力
         'NVDA', 'AMD', 'TSLA', 'MRNA', 'ZM', 'PTON', 'UBER',
         'PLTR', 'MSTR', 'COIN', 'SMCI', 'ARM', 'AVGO', 'META', 'AMZN', 'NFLX', 
         'LLY', 'VRTX', 'CRWD', 'PANW', 'ORCL', 'SHOP',
         'APP', 'IONQ', 'RGTI', 'RKLB', 'VRT', 'ANET', 'SNOW', 'COST',
-        'VST', 'MU', 'AMAT', 'LRCX', 'ASML', 'KLAC', 'GLW'
+        'VST', 'MU', 'AMAT', 'LRCX', 'ASML', 'KLAC', 'GLW',
+        # 🔥 新增美股妖股候選
+        'ASTS',     # 太空通訊
+        'OKLO',     # 核能 AI 電力
+        'VKTX'      # 減肥藥生技
     ],
     'TW_STOCKS': [ 
+        # 既有主力
         '2330.TW', '2454.TW', '2317.TW', '2382.TW',
         '3231.TW', '6669.TW', '3017.TW',
         '1519.TW', '1503.TW', '2603.TW', '2609.TW',
         '8996.TW', '6515.TW', '6442.TW', '6139.TW',
-        '8299.TWO', '3529.TWO', '3081.TWO', '6739.TWO', '6683.TWO'
+        '8299.TWO', '3529.TWO', '3081.TWO', '6739.TWO', '6683.TWO',
+        # 🔥 新增台股熱點
+        '2359.TW',  # 所羅門
+        '3131.TWO', # 弘塑
+        '3583.TW',  # 辛耘
+        '8054.TW'   # 安國
     ]
 }
 
+# TIER 1 定義：除槓桿與幣圈外，優先關注的「精銳股票」 (權重 1.2x)
 TIER_1_ASSETS = [
-    'BTC-USD', 'ETH-USD', 'SOL-USD', 'BNB-USD',
-    'NVDA', 'TSLA', 'MSTR', 'COIN', 'APP', 'PLTR',
+    # Crypto 與 Leverage 雖然在此列，但在程式邏輯中會被更高的類別權重(1.4/1.5)覆蓋
+    'BTC-USD', 'ETH-USD', 'SOL-USD', 'BNB-USD', 'WIF-USD',
     'SOXL', 'NVDL', 'TQQQ', 'MSTU', 'CONL', 'FNGU',
+    # --- 真正生效的 Tier 1 股票 (1.2x) ---
+    'NVDA', 'TSLA', 'MSTR', 'COIN', 'APP', 'PLTR', 'ASTS',
     '2330.TW', '2454.TW', '2317.TW'
 ]
 
@@ -88,11 +118,12 @@ def normalize_symbol(raw_symbol):
         'RNDR': 'RENDER-USD', 'RENDER': 'RENDER-USD',
         'TAO': 'TAO22974-USD', 'SUI': 'SUI20947-USD',
         'HYPE': 'HYPE-USD', 'WLD': 'WLD-USD', 'FET': 'FET-USD',
-        'MATIC': 'POL-USD', 'POL': 'POL-USD'
+        'MATIC': 'POL-USD', 'POL': 'POL-USD',
+        'TIA': 'TIA-USD', 'STX': 'STX-USD'
     }
     if raw_symbol in alias_map: return alias_map[raw_symbol]
     
-    otc_list = ['8299', '3529', '3081', '6739', '6683', '8069', '3293', '3661'] 
+    otc_list = ['8299', '3529', '3081', '6739', '6683', '8069', '3293', '3661', '3131'] 
     if raw_symbol.isdigit() and len(raw_symbol) == 4:
         if raw_symbol in otc_list: return f"{raw_symbol}.TWO"
         return f"{raw_symbol}.TW"
@@ -166,10 +197,8 @@ def analyze_market():
 
     print(f"📥 下載 {len(all_tickers)} 檔標的數據...")
     try:
-        # 🔥 修改點：auto_adjust=False 確保抓取原始價格，不進行除權息調整
         data = yf.download(all_tickers, period="250d", progress=False, auto_adjust=False)
         if data.empty: return None
-        # 對於未調整數據，我們使用 'Close'
         closes = data['Close'].ffill()
     except Exception as e:
         print(f"❌ 數據下載失敗: {e}")
@@ -203,12 +232,11 @@ def analyze_market():
         tw_ma60 = tw_series.rolling(60).mean().iloc[-1]
         regime['TW_BULL'] = tw_last > tw_ma60
     else:
-        # 如果抓不到大盤，暫時跟隨美股，但這是 Fallback
         regime['TW_BULL'] = regime['US_BULL'] 
 
     current_prices = {t: closes[t].iloc[-1] for t in all_tickers if t in closes.columns}
     
-    # 🔍 數據診斷區：印出比對表，讓用戶檢查
+    # 🔍 數據診斷區
     print("\n🔍 數據診斷 (請檢查 Yahoo 價格是否正確):")
     print("-" * 50)
     print(f"{'Symbol':<15} | {'Yahoo Price':<12} | {'CSV Entry':<12} | {'Calc PnL':<8}")
@@ -239,7 +267,7 @@ def analyze_market():
         
         atype = get_asset_type(symbol)
         
-        # A. 冬眠檢查 (獨立分區)
+        # A. 冬眠檢查
         is_winter = False
         if atype == 'CRYPTO' and not regime['CRYPTO_BULL']: is_winter = True
         elif atype in ['US_STOCK', 'LEVERAGE'] and not regime['US_BULL']: is_winter = True
@@ -249,7 +277,6 @@ def analyze_market():
         reason = ""
         profit_pct = (curr_price - entry_price) / entry_price
         
-        # 🔥 策略 B: 貪婪移動停利 (翻倍後收緊至 15%)
         trail_limit = 0.75
         if profit_pct > 1.0: trail_limit = 0.85
         
@@ -277,12 +304,14 @@ def analyze_market():
         else:
             score = row['Momentum']
             multiplier = 1.0
+            
+            # 🔥 權重邏輯
             if symbol in TIER_1_ASSETS: multiplier = 1.2
             if atype == 'CRYPTO': multiplier = 1.4
             if atype == 'LEVERAGE': multiplier = 1.5
+            
             final_score = score * multiplier
             
-            # 加入 Entry Price 到 keeps 列表，方便顯示
             keeps.append({
                 'Symbol': symbol, 'Price': curr_price, 'Entry': entry_price, 
                 'Score': final_score, 'Profit': profit_pct, 
@@ -309,7 +338,6 @@ def analyze_market():
         
         row = calculate_indicators(pd.DataFrame({'Close': series}))
         
-        # 多頭排列濾網
         if not (row['Close'] > row['MA20'] and row['MA20'] > row['MA50'] and row['Close'] > row['MA60']):
             continue
             
@@ -318,6 +346,8 @@ def analyze_market():
         
         multiplier = 1.0
         atype = get_asset_type(t)
+        
+        # 🔥 權重邏輯 (保持一致)
         if t in TIER_1_ASSETS: multiplier = 1.2
         if atype == 'CRYPTO': multiplier = 1.4
         if atype == 'LEVERAGE': multiplier = 1.5
@@ -403,14 +433,12 @@ def format_message(regime, sells, keeps, buys, swaps):
     msg = f"🦁 **V196 Apex Predator 實戰日報 (Strategy B)**\n{datetime.now().strftime('%Y-%m-%d')}\n"
     msg += "━━━━━━━━━━━━━━\n"
     
-    # 環境
     us_icon = "🟢" if regime.get('US_BULL', False) else "❄️"
     crypto_icon = "🟢" if regime.get('CRYPTO_BULL', False) else "❄️"
     tw_icon = "🟢" if regime.get('TW_BULL', False) else "❄️"
     msg += f"環境: 美{us_icon} | 幣{crypto_icon} | 台{tw_icon}\n"
     msg += "━━━━━━━━━━━━━━\n"
 
-    # 賣出指令
     if sells:
         msg += "🔴 **【賣出指令】**\n"
         for s in sells:
@@ -418,7 +446,6 @@ def format_message(regime, sells, keeps, buys, swaps):
             msg += f"   現價: {s['Price']:.2f} | 損益: {s['PnL']}\n"
         msg += "--------------------\n"
 
-    # 弒君換馬
     if swaps:
         msg += "💀 **【弒君換馬】**\n"
         for s in swaps:
@@ -429,7 +456,6 @@ def format_message(regime, sells, keeps, buys, swaps):
             msg += f"   🔔 設定: 移動止損 25%\n"
         msg += "--------------------\n"
 
-    # 買入指令
     if buys:
         msg += "🟢 **【買入指令】**\n"
         for b in buys:
@@ -442,13 +468,11 @@ def format_message(regime, sells, keeps, buys, swaps):
                 msg += f"   🔔 設定: 移動止損 25%\n"
         msg += "--------------------\n"
 
-    # 持倉監控
     if keeps:
         msg += "🛡️ **【持倉監控】**\n"
         for k in keeps:
             pnl = k['Profit'] * 100
             emoji = "😍" if pnl > 20 else "🤢" if pnl < 0 else "😐"
-            # 顯示「現價 / 成本」以便除錯
             msg += f"{emoji} {k['Symbol']}: {pnl:+.1f}% (現價{k['Price']:.2f}/成本{k['Entry']:.2f})\n"
             msg += f"   防守: {k['Stop']:.2f} ({k['StopInfo']})\n"
     else:
