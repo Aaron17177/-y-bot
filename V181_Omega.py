@@ -27,11 +27,11 @@ PORTFOLIO_FILE = 'portfolio.csv'
 STRATEGIC_POOL = {
     'CRYPTO': [ 
         'BTC-USD', 'ETH-USD', 'SOL-USD', 'BNB-USD', 'AVAX-USD',
-        'DOGE-USD', 'SHIB-USD', 'MATIC-USD', 'LINK-USD', 'LTC-USD', # POL 改回 MATIC 以獲取歷史數據
+        'DOGE-USD', 'SHIB-USD', 'POL-USD', 'LINK-USD', 'LTC-USD', # MATIC 改為 POL
         'SAND-USD', 'AXS-USD', 'LUNC-USD', 'FTT-USD', 
         'PEPE24478-USD', 'APT-USD', 'NEAR-USD', 'SUI20947-USD',
         'FET-USD', 'RENDER-USD', 'WLD-USD', 'TAO22974-USD', 'BONK-USD',
-        'WIF-USD', 'TIA-USD', 'STX4847-USD' # STX 改用 ID 避免與美股衝突
+        'WIF-USD', 'TIA-USD', 'STX4847-USD' 
     ],
     'LEVERAGE': [ 
         'NVDL', 'SOXL', 'TQQQ', 'FNGU', 'TSLL', 
@@ -52,7 +52,7 @@ STRATEGIC_POOL = {
         '1519.TW', '1503.TW', '2603.TW', '2609.TW',
         '8996.TW', '6515.TW', '6442.TW', '6139.TW',
         '8299.TWO', '3529.TWO', '3081.TWO', '6739.TWO', '6683.TWO',
-        '2359.TW', '3131.TWO', '3583.TW', '8054.TWO' # 修正 8054 為上櫃 .TWO
+        '2359.TW', '3131.TWO', '3583.TW', '8054.TWO'
     ]
 }
 
@@ -98,12 +98,12 @@ def normalize_symbol(raw_symbol):
         'RNDR': 'RENDER-USD', 'RENDER': 'RENDER-USD',
         'TAO': 'TAO22974-USD', 'SUI': 'SUI20947-USD',
         'HYPE': 'HYPE-USD', 'WLD': 'WLD-USD', 'FET': 'FET-USD',
-        'MATIC': 'MATIC-USD', 'POL': 'MATIC-USD', # POL 改回 MATIC-USD
-        'TIA': 'TIA-USD', 'STX': 'STX4847-USD'    # STX 改用 ID
+        'MATIC': 'POL-USD', 'POL': 'POL-USD',      # MATIC 指向 POL
+        'TIA': 'TIA-USD', 'STX': 'STX4847-USD'    
     }
     if raw_symbol in alias_map: return alias_map[raw_symbol]
     
-    otc_list = ['8299', '3529', '3081', '6739', '6683', '8069', '3293', '3661', '3131', '8054'] # 加入 8054
+    otc_list = ['8299', '3529', '3081', '6739', '6683', '8069', '3293', '3661', '3131', '8054'] 
     if raw_symbol.isdigit() and len(raw_symbol) == 4:
         if raw_symbol in otc_list: return f"{raw_symbol}.TWO"
         return f"{raw_symbol}.TW"
@@ -164,28 +164,24 @@ def update_portfolio_csv(holdings, current_prices):
     except Exception as e:
         print(f"❌ 更新 CSV 失敗: {e}")
 
-# 🔥 強制抓取即時報價的函數
+# 🔥 強制抓取即時報價的函數 (修正版 - 移除 history fallback 以避免報錯)
 def get_live_price(symbol):
     """
-    嘗試使用 fast_info 抓取即時報價，如果失敗則回退到歷史數據。
-    這能解決台股/美股盤中報價延遲的問題。
+    嘗試使用 fast_info 抓取即時報價。
+    如果 fast_info 失敗，直接返回 None，讓主程式使用批量下載的數據。
+    避免對台股使用 history(period='1d') 導致 delisted 誤判錯誤。
     """
     try:
         ticker = yf.Ticker(symbol)
         # 優先嘗試 fast_info (這是最即時的)
         price = ticker.fast_info.get('last_price')
         
-        # 如果 fast_info 沒抓到，嘗試抓最近一天的歷史數據
-        if price is None or np.isnan(price):
-            hist = ticker.history(period="1d", auto_adjust=False)
-            if not hist.empty:
-                price = hist['Close'].iloc[-1]
-                
-        if price is not None and not np.isnan(price):
+        if price is not None and not np.isnan(price) and price > 0:
             return price
             
-    except Exception as e:
-        print(f"⚠️ 無法抓取 {symbol} 即時報價: {e}")
+    except Exception:
+        # 這裡不印出錯誤，保持安靜，直接回傳 None
+        pass
     
     return None
 
@@ -236,25 +232,27 @@ def analyze_market():
     else:
         regime['TW_BULL'] = regime['US_BULL'] 
 
-    # 3. 建立當前價格表 (優先使用即時報價)
+    # 3. 建立當前價格表
     current_prices = {}
     
-    # 先填入歷史數據的最後一筆作為備案
+    # 先填入歷史數據的最後一筆作為備案 (這是最穩的)
     for t in all_tickers:
         if t in closes.columns:
             current_prices[t] = closes[t].iloc[-1]
 
-    # 🔥 針對持倉，強制更新為即時報價 (修正報價誤差)
+    # 🔥 針對持倉，嘗試更新為即時報價 (只做有把握的更新)
     print("\n🔍 持倉報價校正 (Live Price Check):")
     print("-" * 50)
     for sym in portfolio.keys():
         live_price = get_live_price(sym)
+        old_price = current_prices.get(sym, 0)
+        
         if live_price:
-            old_price = current_prices.get(sym, 0)
             current_prices[sym] = live_price # 覆蓋舊價格
             print(f"✅ {sym:<15} : {old_price:.2f} -> {live_price:.2f} (即時更新)")
         else:
-            print(f"⚠️ {sym:<15} : 無法獲取即時，使用歷史收盤價")
+            # 沒抓到即時價格也沒關係，用昨收價 (old_price) 
+            print(f"⚠️ {sym:<15} : {old_price:.2f} (使用歷史收盤價)")
     print("-" * 50 + "\n")
 
     update_portfolio_csv(portfolio, current_prices)
@@ -266,7 +264,6 @@ def analyze_market():
     for symbol, data in portfolio.items():
         if symbol not in current_prices: continue
         
-        # 使用最新的即時價格
         curr_price = current_prices[symbol]
         
         # 歷史指標 (MA) 仍使用 closes dataframe
@@ -357,7 +354,6 @@ def analyze_market():
         
         row = calculate_indicators(pd.DataFrame({'Close': series}))
         
-        # 多頭排列濾網
         if not (row['Close'] > row['MA20'] and row['MA20'] > row['MA50'] and row['Close'] > row['MA60']):
             continue
             
@@ -373,7 +369,6 @@ def analyze_market():
         
         final_score = raw_score * multiplier
         
-        # 這裡使用 closes 裡的價格作為參考，因為候選名單不需要即時精確到秒
         candidates.append({'Symbol': t, 'Price': row['Close'], 'Score': final_score})
         
     candidates.sort(key=lambda x: x['Score'], reverse=True)
