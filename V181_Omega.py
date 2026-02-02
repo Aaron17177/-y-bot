@@ -13,9 +13,9 @@ LINE_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
 LINE_USER_ID = os.getenv('LINE_USER_ID')
 PORTFOLIO_FILE = 'portfolio.csv'
 
-# V196 全明星戰力池 (含權重設定)
+# V196 全明星戰力池
 STRATEGIC_POOL = {
-    'CRYPTO': [ # 權重 1.4x
+    'CRYPTO': [ 
         'BTC-USD', 'ETH-USD', 'SOL-USD', 'BNB-USD', 'AVAX-USD',
         'DOGE-USD', 'SHIB-USD', 'POL-USD', 'LINK-USD', 'LTC-USD',
         'SAND-USD', 'AXS-USD', 'LUNC-USD', 'FTT-USD', 
@@ -23,18 +23,18 @@ STRATEGIC_POOL = {
         'FET-USD', 'RENDER-USD', 'WLD-USD', 'TAO22974-USD',
         'BONK-USD'
     ],
-    'LEVERAGE': [ # 權重 1.5x
+    'LEVERAGE': [ 
         'NVDL', 'SOXL', 'TQQQ', 'FNGU', 'TSLL', 
         'CONL', 'BITU', 'USD', 'TECL', 'MSTU', 'LABU'
     ],
-    'US_STOCKS': [ # 權重 1.0x (Tier1 1.2x)
+    'US_STOCKS': [ 
         'NVDA', 'AMD', 'TSLA', 'MRNA', 'ZM', 'PTON', 'UBER',
         'PLTR', 'MSTR', 'COIN', 'SMCI', 'ARM', 'AVGO', 'META', 'AMZN', 'NFLX', 
         'LLY', 'VRTX', 'CRWD', 'PANW', 'ORCL', 'SHOP',
         'APP', 'IONQ', 'RGTI', 'RKLB', 'VRT', 'ANET', 'SNOW', 'COST',
         'VST', 'MU', 'AMAT', 'LRCX', 'ASML', 'KLAC', 'GLW'
     ],
-    'TW_STOCKS': [ # 權重 1.0x (Tier1 1.2x)
+    'TW_STOCKS': [ 
         '2330.TW', '2454.TW', '2317.TW', '2382.TW',
         '3231.TW', '6669.TW', '3017.TW',
         '1519.TW', '1503.TW', '2603.TW', '2609.TW',
@@ -50,10 +50,9 @@ TIER_1_ASSETS = [
     '2330.TW', '2454.TW', '2317.TW'
 ]
 
-# 基準指標
+# 基準指標 (加入 ^TWII)
 BENCHMARKS = ['^GSPC', 'BTC-USD', '^TWII']
 
-# 座位設定
 MAX_TOTAL_POSITIONS = 4
 
 # ==========================================
@@ -72,7 +71,7 @@ def calculate_indicators(df):
     # V196 關鍵均線
     df['MA20'] = df['Close'].rolling(window=20).mean()
     df['MA50'] = df['Close'].rolling(window=50).mean()
-    df['MA60'] = df['Close'].rolling(window=60).mean()
+    df['MA60'] = df['Close'].rolling(window=60).mean() # 台股季線
     df['MA100'] = df['Close'].rolling(window=100).mean() # 幣圈專用
     df['MA200'] = df['Close'].rolling(window=200).mean() # 美股專用
     
@@ -82,27 +81,22 @@ def calculate_indicators(df):
     return df.iloc[-1]
 
 def normalize_symbol(raw_symbol):
-    """自動校正股票代碼"""
     raw_symbol = raw_symbol.strip().upper()
-    
-    # 1. 別名對映 (Yahoo Finance 特殊代碼)
     alias_map = {
         'PEPE': 'PEPE24478-USD', 'SHIB': 'SHIB-USD', 'DOGE': 'DOGE-USD',
         'BONK': 'BONK-USD', 'FLOKI': 'FLOKI-USD', 'WIF': 'WIF-USD',
         'RNDR': 'RENDER-USD', 'RENDER': 'RENDER-USD',
         'TAO': 'TAO22974-USD', 'SUI': 'SUI20947-USD',
         'HYPE': 'HYPE-USD', 'WLD': 'WLD-USD', 'FET': 'FET-USD',
-        'MATIC': 'POL-USD', 'POL': 'POL-USD' # Polygon 換幣修正
+        'MATIC': 'POL-USD', 'POL': 'POL-USD'
     }
     if raw_symbol in alias_map: return alias_map[raw_symbol]
     
-    # 2. 台灣股票 (.TW / .TWO)
     otc_list = ['8299', '3529', '3081', '6739', '6683', '8069', '3293', '3661'] 
     if raw_symbol.isdigit() and len(raw_symbol) == 4:
         if raw_symbol in otc_list: return f"{raw_symbol}.TWO"
         return f"{raw_symbol}.TW"
         
-    # 3. 加密貨幣 (沒有 -USD 的自動補上)
     known_crypto = set([c.split('-')[0] for c in STRATEGIC_POOL['CRYPTO']])
     if raw_symbol in known_crypto:
         for k, v in alias_map.items():
@@ -112,7 +106,6 @@ def normalize_symbol(raw_symbol):
     return raw_symbol
 
 def load_portfolio():
-    """讀取 portfolio.csv"""
     holdings = {}
     if not os.path.exists(PORTFOLIO_FILE):
         print("⚠️ 找不到 portfolio.csv，假設目前空手。")
@@ -123,27 +116,17 @@ def load_portfolio():
             reader = csv.reader(f)
             try:
                 header = next(reader)
-                # 簡單檢查第一欄是否為標題
-                if not header or 'Symbol' not in header[0]:
-                    pass 
+                if not header or 'Symbol' not in header[0]: pass
                 
                 for row in reader:
                     if not row or len(row) < 2: continue
                     symbol = normalize_symbol(row[0])
                     try:
                         entry_price = float(row[1])
-                        # 如果有紀錄最高價就讀取，沒有就設為進場價
                         high_price = float(row[2]) if len(row) > 2 and row[2] else entry_price
-                        
-                        holdings[symbol] = {
-                            'entry_price': entry_price,
-                            'high_price': high_price
-                        }
-                    except ValueError:
-                        continue 
-                        
-            except StopIteration:
-                pass 
+                        holdings[symbol] = {'entry_price': entry_price, 'high_price': high_price}
+                    except ValueError: continue 
+            except StopIteration: pass 
 
         print(f"📋 已讀取持倉監控名單: {list(holdings.keys())}")
         return holdings
@@ -152,7 +135,6 @@ def load_portfolio():
         return {}
 
 def update_portfolio_csv(holdings, current_prices):
-    """更新 CSV 中的最高價"""
     try:
         data_to_write = []
         for symbol, data in holdings.items():
@@ -172,7 +154,7 @@ def update_portfolio_csv(holdings, current_prices):
         print(f"❌ 更新 CSV 失敗: {e}")
 
 # ==========================================
-# 3. 分析引擎
+# 3. 分析引擎 (Strategy B: RealCost Logic)
 # ==========================================
 def analyze_market():
     # 1. 準備清單
@@ -180,7 +162,6 @@ def analyze_market():
     all_tickers = list(set(BENCHMARKS + list(portfolio.keys()) + 
                            [t for cat in STRATEGIC_POOL for t in STRATEGIC_POOL[cat]]))
     
-    # 移除 HYPE
     if 'HYPE-USD' in all_tickers: all_tickers.remove('HYPE-USD')
 
     print(f"📥 下載 {len(all_tickers)} 檔標的數據...")
@@ -192,19 +173,17 @@ def analyze_market():
         print(f"❌ 數據下載失敗: {e}")
         return None
 
-    # 2. 判斷冬眠狀態 (V196 規則)
+    # 2. 判斷冬眠狀態 (V196 RealCost 規則 - 獨立判斷)
     regime = {}
     
-    # 美股/台股看 SPY 200日線
+    # 美股看 SPY 200日線
     spy_series = closes.get('^GSPC', closes.get('SPY'))
     if spy_series is not None:
         spy_last = spy_series.iloc[-1]
         spy_ma200 = spy_series.rolling(200).mean().iloc[-1]
         regime['US_BULL'] = spy_last > spy_ma200
-        regime['TW_BULL'] = regime['US_BULL'] # 台股連動美股
     else:
         regime['US_BULL'] = True
-        regime['TW_BULL'] = True
 
     # 幣圈看 BTC 100日線
     btc_series = closes.get('BTC-USD')
@@ -215,9 +194,17 @@ def analyze_market():
     else:
         regime['CRYPTO_BULL'] = True
 
+    # 🔥 台股獨立看加權指數 60日線 (季線)
+    tw_series = closes.get('^TWII')
+    if tw_series is not None:
+        tw_last = tw_series.iloc[-1]
+        tw_ma60 = tw_series.rolling(60).mean().iloc[-1]
+        regime['TW_BULL'] = tw_last > tw_ma60
+    else:
+        # 如果抓不到大盤，暫時跟隨美股，但這是 Fallback
+        regime['TW_BULL'] = regime['US_BULL'] 
+
     current_prices = {t: closes[t].iloc[-1] for t in all_tickers if t in closes.columns}
-    
-    # 更新 CSV
     update_portfolio_csv(portfolio, current_prices)
 
     # 3. 掃描持倉 (Sell Check)
@@ -237,7 +224,7 @@ def analyze_market():
         
         atype = get_asset_type(symbol)
         
-        # A. 冬眠檢查
+        # A. 冬眠檢查 (獨立分區)
         is_winter = False
         if atype == 'CRYPTO' and not regime['CRYPTO_BULL']: is_winter = True
         elif atype in ['US_STOCK', 'LEVERAGE'] and not regime['US_BULL']: is_winter = True
@@ -247,9 +234,9 @@ def analyze_market():
         reason = ""
         profit_pct = (curr_price - entry_price) / entry_price
         
-        # 移動停利: 預設 25% 回撤
+        # 🔥 策略 B: 貪婪移動停利 (翻倍後收緊至 15%)
         trail_limit = 0.75
-        if profit_pct > 1.0: trail_limit = 0.80
+        if profit_pct > 1.0: trail_limit = 0.85
         
         hard_stop_price = entry_price * 0.70
         trail_stop_price = high_price * trail_limit
@@ -306,6 +293,7 @@ def analyze_market():
         
         row = calculate_indicators(pd.DataFrame({'Close': series}))
         
+        # 多頭排列濾網
         if not (row['Close'] > row['MA20'] and row['MA20'] > row['MA50'] and row['Close'] > row['MA60']):
             continue
             
@@ -336,8 +324,6 @@ def analyze_market():
                 'Buy': best_candidate,
                 'Reason': f"💀 弒君換馬 (評分 {best_candidate['Score']:.2f} vs {worst_holding['Score']:.2f})"
             }
-            # 如果有次佳選擇，且該選擇不是本次弒君的主角，則作為備選
-            # (避免 buy_candidate 和 backup 是同一隻)
             if len(candidates) > 1 and candidates[1]['Symbol'] != best_candidate['Symbol']:
                 swap_info['Backup'] = candidates[1]
                 
@@ -345,15 +331,13 @@ def analyze_market():
             keeps = [k for k in keeps if k != worst_holding]
             sells.append({'Symbol': worst_holding['Symbol'], 'Price': worst_holding['Price'], 'Reason': "💀 弒君被換", 'PnL': f"{worst_holding['Profit']*100:.1f}%"})
             
-    # 6. 空位買入 (修正版：扣除換馬佔位 + 備選名單)
+    # 6. 空位買入
     buys = []
     open_slots = MAX_TOTAL_POSITIONS - len(keeps) - len(swaps)
     
     swap_buy_symbols = [s['Buy']['Symbol'] for s in swaps]
     available_candidates = [c for c in candidates if c['Symbol'] not in swap_buy_symbols]
     
-    # 計算需要推薦的總數：空位數 + 1 (作為備選)
-    # 如果有空位，至少推薦 2 檔 (除非只有 1 檔候選)
     num_recommendations = 0
     if open_slots > 0:
         num_recommendations = open_slots + 1
@@ -361,7 +345,6 @@ def analyze_market():
     if num_recommendations > 0 and available_candidates:
         for i in range(min(num_recommendations, len(available_candidates))):
             cand = available_candidates[i]
-            # 如果是最後一檔且超過了空位數，標記為備選
             is_backup = (i >= open_slots)
             
             buys.append({
@@ -401,10 +384,10 @@ def send_line_notify(msg):
         print(f"❌ 連線錯誤: {e}")
 
 def format_message(regime, sells, keeps, buys, swaps):
-    msg = f"🦁 **V196 Apex Predator 實戰日報**\n{datetime.now().strftime('%Y-%m-%d')}\n"
+    msg = f"🦁 **V196 Apex Predator 實戰日報 (Strategy B)**\n{datetime.now().strftime('%Y-%m-%d')}\n"
     msg += "━━━━━━━━━━━━━━\n"
     
-    # 環境 (新增台股)
+    # 環境
     us_icon = "🟢" if regime.get('US_BULL', False) else "❄️"
     crypto_icon = "🟢" if regime.get('CRYPTO_BULL', False) else "❄️"
     tw_icon = "🟢" if regime.get('TW_BULL', False) else "❄️"
@@ -427,7 +410,7 @@ def format_message(regime, sells, keeps, buys, swaps):
             msg += f"IN : {s['Buy']['Symbol']} ({s['Buy']['Score']:.1f})\n"
             if 'Backup' in s:
                 msg += f"   ✨ 備選: {s['Backup']['Symbol']} ({s['Backup']['Score']:.1f})\n"
-            msg += f"   🔔 記得設定: 移動止損 25%\n"
+            msg += f"   🔔 設定: 移動止損 25%\n"
         msg += "--------------------\n"
 
     # 買入指令
@@ -440,7 +423,7 @@ def format_message(regime, sells, keeps, buys, swaps):
             else:
                 msg += f"💰 {b['Symbol']} @ {b['Price']:.2f} (首選)\n"
                 msg += f"   評分: {b['Score']:.2f}\n"
-                msg += f"   🔔 記得設定: 移動止損 25%\n"
+                msg += f"   🔔 設定: 移動止損 25%\n"
         msg += "--------------------\n"
 
     # 持倉監控
@@ -455,7 +438,7 @@ def format_message(regime, sells, keeps, buys, swaps):
         msg += "☕ 目前空手\n"
 
     msg += "━━━━━━━━━━━━━━\n"
-    msg += "⚠️ 投資有風險，V196波動極大，請嚴格控倉 (總資產20% max)。"
+    msg += "⚠️ V196 RealCost: 嚴守 30% 硬損，翻倍後收緊至 15%。"
     
     return msg
 
