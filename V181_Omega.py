@@ -166,8 +166,10 @@ def analyze_market():
 
     print(f"📥 下載 {len(all_tickers)} 檔標的數據...")
     try:
-        data = yf.download(all_tickers, period="250d", progress=False, auto_adjust=True)
+        # 🔥 修改點：auto_adjust=False 確保抓取原始價格，不進行除權息調整
+        data = yf.download(all_tickers, period="250d", progress=False, auto_adjust=False)
         if data.empty: return None
+        # 對於未調整數據，我們使用 'Close'
         closes = data['Close'].ffill()
     except Exception as e:
         print(f"❌ 數據下載失敗: {e}")
@@ -205,6 +207,19 @@ def analyze_market():
         regime['TW_BULL'] = regime['US_BULL'] 
 
     current_prices = {t: closes[t].iloc[-1] for t in all_tickers if t in closes.columns}
+    
+    # 🔍 數據診斷區：印出比對表，讓用戶檢查
+    print("\n🔍 數據診斷 (請檢查 Yahoo 價格是否正確):")
+    print("-" * 50)
+    print(f"{'Symbol':<15} | {'Yahoo Price':<12} | {'CSV Entry':<12} | {'Calc PnL':<8}")
+    print("-" * 50)
+    for sym, data in portfolio.items():
+        curr = current_prices.get(sym, 0)
+        entry = data['entry_price']
+        pnl = ((curr - entry) / entry * 100) if entry > 0 else 0
+        print(f"{sym:<15} | {curr:<12.2f} | {entry:<12.2f} | {pnl:+.1f}%")
+    print("-" * 50 + "\n")
+
     update_portfolio_csv(portfolio, current_prices)
 
     # 3. 掃描持倉 (Sell Check)
@@ -267,10 +282,11 @@ def analyze_market():
             if atype == 'LEVERAGE': multiplier = 1.5
             final_score = score * multiplier
             
+            # 加入 Entry Price 到 keeps 列表，方便顯示
             keeps.append({
-                'Symbol': symbol, 'Price': curr_price, 'Score': final_score, 
-                'Profit': profit_pct, 'Stop': active_stop_price, 
-                'StopInfo': stop_info
+                'Symbol': symbol, 'Price': curr_price, 'Entry': entry_price, 
+                'Score': final_score, 'Profit': profit_pct, 
+                'Stop': active_stop_price, 'StopInfo': stop_info
             })
 
     # 4. 掃描機會 (Buy Check)
@@ -432,7 +448,8 @@ def format_message(regime, sells, keeps, buys, swaps):
         for k in keeps:
             pnl = k['Profit'] * 100
             emoji = "😍" if pnl > 20 else "🤢" if pnl < 0 else "😐"
-            msg += f"{emoji} {k['Symbol']}: {pnl:+.1f}%\n"
+            # 顯示「現價 / 成本」以便除錯
+            msg += f"{emoji} {k['Symbol']}: {pnl:+.1f}% (現價{k['Price']:.2f}/成本{k['Entry']:.2f})\n"
             msg += f"   防守: {k['Stop']:.2f} ({k['StopInfo']})\n"
     else:
         msg += "☕ 目前空手\n"
