@@ -8,36 +8,33 @@ import time
 from datetime import datetime, timedelta
 
 # ==========================================
-# 1. 參數設定 (V212 Apex Predator - Mythic Correction 實戰版)
+# 1. 參數設定 (V212 Apex Predator - Mythic Correction)
 # ==========================================
-# 核心哲學：妖股給耐心 (Stock Rules)，幣與耗損品給紀律 (Crypto Rules)
+# 功能更新：支援 CSV 輸入簡寫 (如 2330, BTC)，程式自動補全後綴
 
 LINE_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
 LINE_USER_ID = os.getenv('LINE_USER_ID')
 PORTFOLIO_FILE = 'portfolio.csv'
 
 # --- 資金管理 ---
-MAX_TOTAL_POSITIONS = 4  # 4 席位 (25% 倉位)
-USD_TWD_RATE = 32.5      # 僅用於顯示估值
+MAX_TOTAL_POSITIONS = 4
+USD_TWD_RATE = 32.5
 
-# --- 差異化止損設定 (硬止損) ---
-STOCK_HARD_STOP = 0.30   # [股票/趨勢ETF] 30% 止損
-CRYPTO_HARD_STOP = 0.40  # [幣/耗損ETF] 40% 止損
+# --- 差異化止損設定 ---
+STOCK_HARD_STOP = 0.30
+CRYPTO_HARD_STOP = 0.40
 
-# --- 差異化移動停利設定 (從高點回落幅度) ---
-# [股票] 初始 -25%, 翻倍後 -15%
+# --- 差異化移動停利設定 ---
 STOCK_TRAIL_INIT = 0.25
 STOCK_TRAIL_TIGHT = 0.15 
-
-# [幣圈] 初始 -40%, 翻倍後 -25%
 CRYPTO_TRAIL_INIT = 0.40 
 CRYPTO_TRAIL_TIGHT = 0.25
 
 # --- 差異化殭屍清除設定 ---
-CRYPTO_ZOMBIE_DAYS = 5   # 僅對「幣圈/耗損資產」啟用：5天不漲就賣
+CRYPTO_ZOMBIE_DAYS = 5 
 
 # ==========================================
-# 2. 全明星戰力池 (V212 精簡優化版)
+# 2. 全明星戰力池 (V212)
 # ==========================================
 STRATEGIC_POOL = {
     'CRYPTO': [ 
@@ -80,51 +77,25 @@ TIER_1_ASSETS = [
     '2330.TW', '00631L.TW'
 ]
 
-# 🔥 V212 關鍵分類：適用幣圈規則 (寬止損+殭屍清除) 的資產
 CRYPTO_PROXIES = [
-    'ETHU', 'BITX', 'BITU', 'WGMI',  # 純幣 ETF / 礦工
-    'MSTU', 'MSTR', 'COIN', 'CONL',  # 幣圈分身
-    'NVDL', 'SOXL'                   # 高耗損槓桿 ETF
+    'ETHU', 'BITX', 'BITU', 'WGMI',
+    'MSTU', 'MSTR', 'COIN', 'CONL',
+    'NVDL', 'SOXL'
 ]
 
 BENCHMARKS = ['^GSPC', 'BTC-USD', '^TWII']
 
 # ==========================================
-# 3. 輔助函式
+# 3. 輔助函式 (強化版代碼正規化)
 # ==========================================
-def get_asset_type(symbol):
-    if "-USD" in symbol: return 'CRYPTO'
-    if ".TW" in symbol or ".TWO" in symbol:
-        if symbol in STRATEGIC_POOL['TW_LEVERAGE']: return 'LEVERAGE'
-        return 'TW'
-    if any(s == symbol for s in STRATEGIC_POOL['LEVERAGE']): return 'LEVERAGE'
-    return 'US_STOCK'
-
-def is_crypto_rules_apply(symbol):
-    """判斷是否適用幣圈規則 (寬止損 + 殭屍清除)"""
-    atype = get_asset_type(symbol)
-    if atype == 'CRYPTO': return True
-    if symbol in CRYPTO_PROXIES: return True
-    return False
-
-def calculate_indicators(df):
-    if len(df) < 100: return None
-    df = df.copy()
-    
-    # 計算均線
-    df['MA20'] = df['Close'].rolling(window=20).mean()
-    df['MA50'] = df['Close'].rolling(window=50).mean()
-    df['MA60'] = df['Close'].rolling(window=60).mean()
-    df['MA100'] = df['Close'].rolling(window=100).mean()
-    df['MA200'] = df['Close'].rolling(window=200).mean()
-    
-    # 動能：20日漲跌幅
-    df['Momentum'] = df['Close'].pct_change(periods=20)
-    
-    return df.iloc[-1]
-
 def normalize_symbol(raw_symbol):
+    """
+    將用戶輸入的簡寫 (如 8299, BTC) 自動轉換為完整代碼 (8299.TWO, BTC-USD)
+    邏輯：優先查閱 STRATEGIC_POOL，若找不到則使用預設規則。
+    """
     raw_symbol = raw_symbol.strip().upper()
+    
+    # 1. 優先檢查特殊對應表 (Aliases)
     alias_map = {
         'PEPE': 'PEPE24478-USD', 'SHIB': 'SHIB-USD', 'DOGE': 'DOGE-USD',
         'BONK': 'BONK-USD', 'FLOKI': 'FLOKI-USD', 'WIF': 'WIF-USD',
@@ -135,22 +106,61 @@ def normalize_symbol(raw_symbol):
         'TIA': 'TIA-USD', 'STX': 'STX4847-USD'    
     }
     if raw_symbol in alias_map: return alias_map[raw_symbol]
+
+    # 2. 自動從戰力池 (STRATEGIC_POOL) 尋找匹配
+    # 這是最聰明的方式，只要戰力池有設定，CSV 就可以只寫簡寫
+    for cat in STRATEGIC_POOL:
+        for ticker in STRATEGIC_POOL[cat]:
+            # 檢查台股 (例如輸入 8299 匹配 8299.TWO)
+            if "." in ticker:
+                code, suffix = ticker.split('.')
+                if raw_symbol == code:
+                    return ticker
+            
+            # 檢查加密貨幣 (例如輸入 BTC 匹配 BTC-USD)
+            if "-" in ticker:
+                code = ticker.split('-')[0]
+                if raw_symbol == code:
+                    return ticker
     
-    otc_list = ['8299', '3529', '3081', '6739', '6683', '8069', '3293', '3661', '3131', '8054', '5269', '6531'] 
+    # 3. 如果戰力池沒找到，進行 Fallback 處理
+    # 台股 4碼 -> 預設 .TW (如果上櫃股沒在戰力池，這裡可能會錯，所以建議重要標的都要放戰力池)
     if raw_symbol.isdigit() and len(raw_symbol) == 4:
-        if raw_symbol in otc_list: return f"{raw_symbol}.TWO"
-        return f"{raw_symbol}.TW"
-    
-    if (len(raw_symbol) == 5 or len(raw_symbol) == 6) and (raw_symbol.endswith('L') or raw_symbol.endswith('Q')):
          return f"{raw_symbol}.TW"
-        
-    known_crypto = set([c.split('-')[0] for c in STRATEGIC_POOL['CRYPTO']])
-    if raw_symbol in known_crypto:
-        for k, v in alias_map.items():
-            if raw_symbol == k: return v
+         
+    # 常見加密貨幣補救
+    if raw_symbol in ['BTC', 'ETH', 'SOL', 'BNB', 'AVAX']:
         return f"{raw_symbol}-USD"
 
+    # 如果都不是，假設是用戶輸入了完整代碼 (如 NVDA, TQQQ)
     return raw_symbol
+
+def get_asset_type(symbol):
+    if "-USD" in symbol: return 'CRYPTO'
+    if ".TW" in symbol or ".TWO" in symbol:
+        if symbol in STRATEGIC_POOL['TW_LEVERAGE']: return 'LEVERAGE'
+        return 'TW'
+    if any(s == symbol for s in STRATEGIC_POOL['LEVERAGE']): return 'LEVERAGE'
+    return 'US_STOCK'
+
+def is_crypto_rules_apply(symbol):
+    atype = get_asset_type(symbol)
+    if atype == 'CRYPTO': return True
+    if symbol in CRYPTO_PROXIES: return True
+    return False
+
+def calculate_indicators(df):
+    if len(df) < 100: return None
+    df = df.copy()
+    
+    df['MA20'] = df['Close'].rolling(window=20).mean()
+    df['MA50'] = df['Close'].rolling(window=50).mean()
+    df['MA60'] = df['Close'].rolling(window=60).mean()
+    df['MA100'] = df['Close'].rolling(window=100).mean()
+    df['MA200'] = df['Close'].rolling(window=200).mean()
+    df['Momentum'] = df['Close'].pct_change(periods=20)
+    
+    return df.iloc[-1]
 
 def load_portfolio():
     holdings = {}
@@ -163,25 +173,27 @@ def load_portfolio():
             reader = csv.reader(f)
             try:
                 header = next(reader)
-                # 檢查 CSV 版本，如果沒有 Date 欄位，預設為今天
                 has_date = 'EntryDate' in header if header else False
                 
                 for row in reader:
                     if not row or len(row) < 2: continue
+                    # 在這裡進行標準化
                     symbol = normalize_symbol(row[0])
                     try:
                         entry_price = float(row[1])
-                        high_price = float(row[2]) if len(row) > 2 and row[2] else entry_price
                         
-                        # 處理買入日期
-                        if has_date and len(row) > 3 and row[3]:
-                            entry_date = row[3]
-                        else:
-                            entry_date = datetime.now().strftime('%Y-%m-%d')
-                            
+                        entry_date = datetime.now().strftime('%Y-%m-%d')
+                        if has_date:
+                            try:
+                                date_idx = header.index('EntryDate')
+                                if len(row) > date_idx and row[date_idx]:
+                                    entry_date = row[date_idx]
+                            except ValueError:
+                                if len(row) >= 3 and '-' in str(row[-1]):
+                                    entry_date = row[-1]
+                        
                         holdings[symbol] = {
                             'entry_price': entry_price, 
-                            'high_price': high_price,
                             'entry_date': entry_date
                         }
                     except ValueError: continue 
@@ -193,45 +205,34 @@ def load_portfolio():
         print(f"❌ 讀取 CSV 失敗: {e}")
         return {}
 
-def update_portfolio_csv(holdings, current_prices, new_buys=None):
+def update_portfolio_csv(holdings, new_buys=None):
     try:
-        # 更新現有持倉的最高價
         data_to_write = []
-        
-        # 1. 處理舊持倉 (更新 High Price)
         for symbol, data in holdings.items():
-            curr_p = current_prices.get(symbol, 0)
-            if curr_p > 0:
-                new_high = max(data['high_price'], curr_p)
-                data_to_write.append([symbol, data['entry_price'], new_high, data['entry_date']])
-            else:
-                data_to_write.append([symbol, data['entry_price'], data['high_price'], data['entry_date']])
+            # 寫回時保持標準化後的代碼，確保下次讀取正確
+            data_to_write.append([symbol, data['entry_price'], data['entry_date']])
         
-        # 2. 加入新買入 (如果有的話)
         if new_buys:
             for buy in new_buys:
                 symbol = buy['Symbol']
                 price = buy['Price']
                 date = datetime.now().strftime('%Y-%m-%d')
-                # 避免重複寫入
                 if not any(row[0] == symbol for row in data_to_write):
-                     data_to_write.append([symbol, price, price, date])
+                     data_to_write.append([symbol, price, date])
 
         with open(PORTFOLIO_FILE, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
-            writer.writerow(['Symbol', 'EntryPrice', 'HighPrice', 'EntryDate'])
+            writer.writerow(['Symbol', 'EntryPrice', 'EntryDate'])
             writer.writerows(data_to_write)
-        print("✅ Portfolio CSV 已更新 (含日期)")
+        print("✅ Portfolio CSV 已更新")
     except Exception as e:
         print(f"❌ 更新 CSV 失敗: {e}")
 
 def get_live_price(symbol):
     try:
         ticker = yf.Ticker(symbol)
-        # 嘗試獲取即時價格
         price = ticker.fast_info.get('last_price')
         if price is None or np.isnan(price):
-             # 備用方案
              hist = ticker.history(period="1d")
              if not hist.empty:
                  price = hist['Close'].iloc[-1]
@@ -243,10 +244,9 @@ def get_live_price(symbol):
     return None
 
 # ==========================================
-# 4. 分析引擎 (V212 Logic)
+# 4. 分析引擎
 # ==========================================
 def analyze_market():
-    # 1. 準備清單
     portfolio = load_portfolio()
     all_pool_tickers = [t for cat in STRATEGIC_POOL for t in STRATEGIC_POOL[cat]]
     all_tickers = list(set(BENCHMARKS + list(portfolio.keys()) + all_pool_tickers))
@@ -262,10 +262,8 @@ def analyze_market():
         print(f"❌ 數據下載失敗: {e}")
         return None
 
-    # 2. 判斷環境狀態 (Regime Check)
+    # 判斷環境
     regime = {}
-    
-    # 美股 & 槓桿ETF 冬眠線: SPY < 200MA
     spy_series = closes.get('^GSPC', closes.get('SPY'))
     if spy_series is not None:
         spy_last = spy_series.iloc[-1]
@@ -274,7 +272,6 @@ def analyze_market():
     else:
         regime['US_BULL'] = True 
 
-    # 加密貨幣 冬眠線: BTC < 100MA
     btc_series = closes.get('BTC-USD')
     if btc_series is not None:
         btc_last = btc_series.iloc[-1]
@@ -283,7 +280,6 @@ def analyze_market():
     else:
         regime['CRYPTO_BULL'] = True
 
-    # 台股 冬眠線: TWII < 60MA
     tw_series = closes.get('^TWII')
     if tw_series is not None:
         tw_last = tw_series.iloc[-1]
@@ -292,7 +288,6 @@ def analyze_market():
     else:
         regime['TW_BULL'] = regime['US_BULL'] 
 
-    # 3. 建立當前價格表
     current_prices = {}
     for t in all_tickers:
         if t in closes.columns:
@@ -309,9 +304,7 @@ def analyze_market():
             print(f"⚠️ {sym:<15} : {old_price:.2f} (歷史收盤)")
     print("-" * 50)
 
-    # 先不寫入 CSV，等最後確定買賣後再寫入，但這裡需要傳入 current_prices 給後續邏輯
-
-    # 4. 掃描持倉 (Sell Logic: V212)
+    # 掃描持倉
     sells = []
     keeps = []
     
@@ -319,8 +312,6 @@ def analyze_market():
         if symbol not in current_prices: continue
         
         curr_price = current_prices[symbol]
-        
-        # 計算個別標的季線 (MA50)
         ma50 = 0
         if symbol in closes.columns:
             series = closes[symbol].dropna()
@@ -329,79 +320,54 @@ def analyze_market():
                 ma50 = row['MA50']
         
         entry_price = data['entry_price']
-        high_price = max(data['high_price'], curr_price)
         entry_date_str = data.get('entry_date', datetime.now().strftime('%Y-%m-%d'))
-        entry_date = datetime.strptime(entry_date_str, '%Y-%m-%d')
-        
+        try:
+            entry_date = datetime.strptime(entry_date_str, '%Y-%m-%d')
+        except ValueError:
+            entry_date = datetime.now()
+
         atype = get_asset_type(symbol)
         use_crypto_rules = is_crypto_rules_apply(symbol)
         
-        # A. 冬眠檢查
         is_winter = False
         if atype == 'CRYPTO' and not regime['CRYPTO_BULL']: is_winter = True
         elif atype in ['US_STOCK', 'LEVERAGE'] and not regime['US_BULL']: is_winter = True
         elif atype == 'TW' and not regime['TW_BULL']: is_winter = True
         
-        # B. 停損停利參數 (V212 差異化)
         profit_pct = (curr_price - entry_price) / entry_price
         
         if use_crypto_rules:
-            # 幣圈規則：寬止損、寬停利
             stop_pct = CRYPTO_HARD_STOP
-            if profit_pct > 1.0: 
-                trail_limit = 1 - CRYPTO_TRAIL_TIGHT # 0.75
-            else:
-                trail_limit = 1 - CRYPTO_TRAIL_INIT  # 0.60
             rule_name = "瘋狗規則"
         else:
-            # 股票規則：標準止損、標準停利
             stop_pct = STOCK_HARD_STOP
-            if profit_pct > 1.0:
-                trail_limit = 1 - STOCK_TRAIL_TIGHT  # 0.85
-            else:
-                trail_limit = 1 - STOCK_TRAIL_INIT   # 0.75
             rule_name = "股票規則"
 
         hard_stop_price = entry_price * (1 - stop_pct)
-        trail_stop_price = high_price * trail_limit
-        active_stop_price = max(hard_stop_price, trail_stop_price)
         
-        stop_info = ""
-        if active_stop_price == hard_stop_price:
-            stop_info = f"硬損-{int(stop_pct*100)}%"
-        else:
-            stop_info = f"高點-{int((1-trail_limit)*100)}%"
-
-        # C. 檢查出場條件
         reason = ""
         days_held = (datetime.now() - entry_date).days
 
-        # 1. 殭屍清除 (僅適用 Crypto Rules)
         if not reason and use_crypto_rules and days_held > CRYPTO_ZOMBIE_DAYS and curr_price <= entry_price:
              reason = f"💤 殭屍清除 (> {CRYPTO_ZOMBIE_DAYS}天滯漲)"
 
-        # 2. 常規檢查
         if not reason:
             if is_winter:
                 reason = "❄️ 分區冬眠 (清倉)"
             elif curr_price < hard_stop_price:
                 reason = f"🔴 深淵止損 (-{int(stop_pct*100)}%)"
-            elif curr_price < trail_stop_price:
-                reason = f"🛡️ 移動停利 ({stop_info})"
             elif ma50 > 0 and curr_price < ma50:
                  reason = "❌ 跌破季線 (MA50)"
         
         if reason:
             sells.append({'Symbol': symbol, 'Price': curr_price, 'Reason': reason, 'PnL': f"{profit_pct*100:.1f}%"})
         else:
-            # 計算分數 (用於弒君)
             final_score = 0
             if symbol in closes.columns and len(closes[symbol].dropna()) >= 20:
                 series = closes[symbol].dropna()
                 row = calculate_indicators(pd.DataFrame({'Close': series}))
                 score = row['Momentum']
                 
-                # 加權乘數
                 multiplier = 1.0
                 if symbol in TIER_1_ASSETS: multiplier = 1.2
                 if atype == 'CRYPTO': multiplier = 1.4
@@ -412,11 +378,10 @@ def analyze_market():
             keeps.append({
                 'Symbol': symbol, 'Price': curr_price, 'Entry': entry_price, 
                 'Score': final_score, 'Profit': profit_pct, 
-                'Stop': active_stop_price, 'StopInfo': stop_info,
                 'Rule': rule_name, 'Days': days_held
             })
 
-    # 5. 掃描機會 (Buy Logic)
+    # 掃描機會
     candidates = []
     
     valid_pool = []
@@ -438,7 +403,6 @@ def analyze_market():
         
         row = calculate_indicators(pd.DataFrame({'Close': series}))
         
-        # 多頭排列濾網
         if not (row['Close'] > row['MA20'] and row['MA20'] > row['MA50'] and row['Close'] > row['MA60']):
             continue
             
@@ -453,12 +417,11 @@ def analyze_market():
         if atype == 'LEVERAGE': multiplier = 1.5
         
         final_score = raw_score * multiplier
-        
         candidates.append({'Symbol': t, 'Price': row['Close'], 'Score': final_score})
         
     candidates.sort(key=lambda x: x['Score'], reverse=True)
     
-    # 6. 弒君檢查 (Killer Swap - Threshold 1.5x)
+    # 弒君檢查
     swaps = []
     if keeps and candidates:
         worst_holding = min(keeps, key=lambda x: x['Score'])
@@ -474,20 +437,17 @@ def analyze_market():
                 swap_info['Backup'] = candidates[1]
                 
             swaps.append(swap_info)
-            # 模擬賣出
             keeps = [k for k in keeps if k != worst_holding]
             sells.append({'Symbol': worst_holding['Symbol'], 'Price': worst_holding['Price'], 'Reason': "💀 弒君被換", 'PnL': f"{worst_holding['Profit']*100:.1f}%"})
             
-    # 7. 空位買入
+    # 空位買入
     buys = []
-    final_buys_for_csv = [] # 用於寫入 CSV
+    final_buys_for_csv = [] 
     
     open_slots = MAX_TOTAL_POSITIONS - len(keeps) - len(swaps)
-    
     swap_buy_symbols = [s['Buy']['Symbol'] for s in swaps]
     available_candidates = [c for c in candidates if c['Symbol'] not in swap_buy_symbols]
     
-    # 將 Swap 的買入也加入待寫入列表
     for s in swaps:
         final_buys_for_csv.append({'Symbol': s['Buy']['Symbol'], 'Price': s['Buy']['Price']})
 
@@ -510,26 +470,14 @@ def analyze_market():
             if not is_backup:
                 final_buys_for_csv.append({'Symbol': cand['Symbol'], 'Price': cand['Price']})
 
-    # 最後執行 CSV 更新 (剔除賣出，加入買入，更新留倉)
-    # 這裡只做一次性更新，注意：真實下單需要人工確認，所以這裡只是模擬「如果執行了」的狀態
-    # 為了 GitHub Action 的連續性，我們假設用戶會跟單，所以更新 CSV
-    # 但需注意 Sells 實際需要被移除。
-    
-    final_holdings = {}
-    
-    # 保留 Keeps
+    final_holdings_map = {}
     for k in keeps:
-        sym = k['Symbol']
-        final_holdings[sym] = portfolio[sym] # 保持原樣
+        final_holdings_map[k['Symbol']] = {'entry_price': k['Entry'], 'entry_date': portfolio[k['Symbol']]['entry_date']}
     
-    # 執行更新
-    update_portfolio_csv(final_holdings, current_prices, final_buys_for_csv)
+    update_portfolio_csv(final_holdings_map, final_buys_for_csv)
 
     return regime, sells, keeps, buys, swaps
 
-# ==========================================
-# 5. 訊息發送
-# ==========================================
 def send_line_notify(msg):
     if not LINE_ACCESS_TOKEN or not LINE_USER_ID:
         print("⚠️ 未設定 LINE Token，跳過發送。")
@@ -547,9 +495,7 @@ def send_line_notify(msg):
     }
     try:
         response = requests.post(url, headers=headers, json=data)
-        if response.status_code == 200:
-            print("✅ LINE 通知已發送")
-        else:
+        if response.status_code != 200:
             print(f"❌ LINE 發送失敗: {response.text}")
     except Exception as e:
         print(f"❌ 連線錯誤: {e}")
@@ -601,20 +547,17 @@ def format_message(regime, sells, keeps, buys, swaps):
             day_str = f"{days}天"
             
             msg += f"{emoji} {k['Symbol']} {rule_tag}: {pnl:+.1f}% ({day_str})\n"
-            msg += f"   現價: {k['Price']:.2f} | 防守: {k['Stop']:.2f}\n"
-            msg += f"   {k['StopInfo']}\n"
+            msg += f"   現價: {k['Price']:.2f}\n"
     else:
         msg += "☕ 目前空手\n"
 
     msg += "━━━━━━━━━━━━━━\n"
     msg += "⚡:瘋狗規則 (5天殭屍清除/40%止損)\n"
     msg += "🐢:股票規則 (耐心持有/30%止損)\n"
+    msg += "※ 移動停利請至平台自行設定"
     
     return msg
 
-# ==========================================
-# 主程式
-# ==========================================
 if __name__ == "__main__":
     result = analyze_market()
     if result:
