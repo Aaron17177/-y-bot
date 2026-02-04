@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 # ==========================================
 # 1. 參數設定 (V212 Apex Predator - Mythic Correction)
 # ==========================================
-# 功能更新：支援 CSV 輸入簡寫 (如 2330, BTC)，程式自動補全後綴
+# 功能更新：買入訊號明確顯示止損趴數 (30% 或 40%)
 
 LINE_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
 LINE_USER_ID = os.getenv('LINE_USER_ID')
@@ -86,16 +86,10 @@ CRYPTO_PROXIES = [
 BENCHMARKS = ['^GSPC', 'BTC-USD', '^TWII']
 
 # ==========================================
-# 3. 輔助函式 (強化版代碼正規化)
+# 3. 輔助函式
 # ==========================================
 def normalize_symbol(raw_symbol):
-    """
-    將用戶輸入的簡寫 (如 8299, BTC) 自動轉換為完整代碼 (8299.TWO, BTC-USD)
-    邏輯：優先查閱 STRATEGIC_POOL，若找不到則使用預設規則。
-    """
     raw_symbol = raw_symbol.strip().upper()
-    
-    # 1. 優先檢查特殊對應表 (Aliases)
     alias_map = {
         'PEPE': 'PEPE24478-USD', 'SHIB': 'SHIB-USD', 'DOGE': 'DOGE-USD',
         'BONK': 'BONK-USD', 'FLOKI': 'FLOKI-USD', 'WIF': 'WIF-USD',
@@ -107,32 +101,22 @@ def normalize_symbol(raw_symbol):
     }
     if raw_symbol in alias_map: return alias_map[raw_symbol]
 
-    # 2. 自動從戰力池 (STRATEGIC_POOL) 尋找匹配
-    # 這是最聰明的方式，只要戰力池有設定，CSV 就可以只寫簡寫
     for cat in STRATEGIC_POOL:
         for ticker in STRATEGIC_POOL[cat]:
-            # 檢查台股 (例如輸入 8299 匹配 8299.TWO)
             if "." in ticker:
                 code, suffix = ticker.split('.')
                 if raw_symbol == code:
                     return ticker
-            
-            # 檢查加密貨幣 (例如輸入 BTC 匹配 BTC-USD)
             if "-" in ticker:
                 code = ticker.split('-')[0]
                 if raw_symbol == code:
                     return ticker
     
-    # 3. 如果戰力池沒找到，進行 Fallback 處理
-    # 台股 4碼 -> 預設 .TW (如果上櫃股沒在戰力池，這裡可能會錯，所以建議重要標的都要放戰力池)
     if raw_symbol.isdigit() and len(raw_symbol) == 4:
          return f"{raw_symbol}.TW"
-         
-    # 常見加密貨幣補救
     if raw_symbol in ['BTC', 'ETH', 'SOL', 'BNB', 'AVAX']:
         return f"{raw_symbol}-USD"
 
-    # 如果都不是，假設是用戶輸入了完整代碼 (如 NVDA, TQQQ)
     return raw_symbol
 
 def get_asset_type(symbol):
@@ -177,11 +161,9 @@ def load_portfolio():
                 
                 for row in reader:
                     if not row or len(row) < 2: continue
-                    # 在這裡進行標準化
                     symbol = normalize_symbol(row[0])
                     try:
                         entry_price = float(row[1])
-                        
                         entry_date = datetime.now().strftime('%Y-%m-%d')
                         if has_date:
                             try:
@@ -209,7 +191,6 @@ def update_portfolio_csv(holdings, new_buys=None):
     try:
         data_to_write = []
         for symbol, data in holdings.items():
-            # 寫回時保持標準化後的代碼，確保下次讀取正確
             data_to_write.append([symbol, data['entry_price'], data['entry_date']])
         
         if new_buys:
@@ -262,7 +243,6 @@ def analyze_market():
         print(f"❌ 數據下載失敗: {e}")
         return None
 
-    # 判斷環境
     regime = {}
     spy_series = closes.get('^GSPC', closes.get('SPY'))
     if spy_series is not None:
@@ -304,7 +284,6 @@ def analyze_market():
             print(f"⚠️ {sym:<15} : {old_price:.2f} (歷史收盤)")
     print("-" * 50)
 
-    # 掃描持倉
     sells = []
     keeps = []
     
@@ -381,7 +360,6 @@ def analyze_market():
                 'Rule': rule_name, 'Days': days_held
             })
 
-    # 掃描機會
     candidates = []
     
     valid_pool = []
@@ -417,11 +395,15 @@ def analyze_market():
         if atype == 'LEVERAGE': multiplier = 1.5
         
         final_score = raw_score * multiplier
-        candidates.append({'Symbol': t, 'Price': row['Close'], 'Score': final_score})
+        
+        # 決定止損比例
+        is_crypto_rule = is_crypto_rules_apply(t)
+        sl_pct = CRYPTO_HARD_STOP if is_crypto_rule else STOCK_HARD_STOP
+        
+        candidates.append({'Symbol': t, 'Price': row['Close'], 'Score': final_score, 'StopLoss': sl_pct})
         
     candidates.sort(key=lambda x: x['Score'], reverse=True)
     
-    # 弒君檢查
     swaps = []
     if keeps and candidates:
         worst_holding = min(keeps, key=lambda x: x['Score'])
@@ -440,7 +422,6 @@ def analyze_market():
             keeps = [k for k in keeps if k != worst_holding]
             sells.append({'Symbol': worst_holding['Symbol'], 'Price': worst_holding['Price'], 'Reason': "💀 弒君被換", 'PnL': f"{worst_holding['Profit']*100:.1f}%"})
             
-    # 空位買入
     buys = []
     final_buys_for_csv = [] 
     
@@ -464,6 +445,7 @@ def analyze_market():
                 'Symbol': cand['Symbol'],
                 'Price': cand['Price'],
                 'Score': cand['Score'],
+                'StopLoss': cand['StopLoss'], # 傳遞止損資訊
                 'IsBackup': is_backup
             })
             
@@ -520,21 +502,26 @@ def format_message(regime, sells, keeps, buys, swaps):
     if swaps:
         msg += "💀 **【弒君換馬】**\n"
         for s in swaps:
+            sl_pct = int(s['Buy']['StopLoss'] * 100)
             msg += f"OUT: {s['Sell']['Symbol']} ({s['Sell']['Score']:.1f})\n"
             msg += f"IN : {s['Buy']['Symbol']} ({s['Buy']['Score']:.1f})\n"
+            msg += f"   🛑 建議止損: -{sl_pct}%\n"
             if 'Backup' in s:
-                msg += f"   ✨ 備選: {s['Backup']['Symbol']} ({s['Backup']['Score']:.1f})\n"
+                bk_sl = int(s['Backup']['StopLoss'] * 100)
+                msg += f"   ✨ 備選: {s['Backup']['Symbol']} (止損-{bk_sl}%)\n"
         msg += "--------------------\n"
 
     if buys:
         msg += "🟢 **【買入指令】**\n"
         for b in buys:
+            sl_pct = int(b['StopLoss'] * 100)
             if b.get('IsBackup', False):
                 msg += f"✨ {b['Symbol']} @ {b['Price']:.2f} (備選)\n"
-                msg += f"   評分: {b['Score']:.2f}\n"
+                msg += f"   評分: {b['Score']:.2f} | 止損: -{sl_pct}%\n"
             else:
                 msg += f"💰 {b['Symbol']} @ {b['Price']:.2f} (首選)\n"
                 msg += f"   評分: {b['Score']:.2f}\n"
+                msg += f"   🛑 建議止損: -{sl_pct}%\n"
         msg += "--------------------\n"
 
     if keeps:
