@@ -194,12 +194,13 @@ def analyze_market():
         elif 'TW' in sector and not regime.get('TW_BULL', True): reason = "❄️ 分區冬眠 (TWII < MA60)"
         elif 'US' in sector and not regime.get('US_BULL', True): reason = "❄️ 分區冬眠 (SPY < MA200)"
         
-        # C. 階梯停利 & 硬止損
+        # C. 計算建議停利點 (Advisory)
         limit = params['trail_1']
         if not reason:
             if profit_pct > 1.0: limit = params['trail_3']
             elif profit_pct > 0.3: limit = params['trail_2']
             
+            # 觸發賣出條件 (作為最後防線)
             if profit_pct < -params['stop']:
                 reason = f"🔴 觸及止損 ({profit_pct*100:.1f}%)"
             elif sector in ['US_STOCK', 'TW_STOCK'] and curr_price < ma50:
@@ -326,19 +327,29 @@ def format_message(regime, sells, keeps, buys, swaps):
             msg += f"   原因: {s['Reason']}\n"
         msg += "--------------------\n"
 
-    # 過濾掉已經在 swap 裡的買入，避免重複顯示
     swap_buys = [s['Buy']['Symbol'] for s in swaps]
     new_buys = [b for b in buys if b['Symbol'] not in swap_buys]
     
     if new_buys:
         msg += "🟢 **【買入指令】**\n"
         for b in new_buys:
-            stop_pct = SECTOR_PARAMS.get(b['Sector'], SECTOR_PARAMS['US_STOCK'])['stop']
+            params = SECTOR_PARAMS.get(b['Sector'], SECTOR_PARAMS['US_STOCK'])
+            stop_pct = params['stop']
+            trail_pct = params['trail_1']
+            
             stop_price = b['Price'] * (1 - stop_pct)
+            
             msg += f"💰 買入: {b['Symbol']}\n"
             msg += f"   價格: {b['Price']:.2f}\n"
             msg += f"   分數: {b['Score']:.2f}\n"
-            msg += f"   🛑 硬止損: {stop_price:.2f} (-{int(stop_pct*100)}%)\n"
+            
+            # [UI優化] 直接顯示要設定的移動停利趴數
+            msg += f"   👮 券商設定: 移動停利 {int(trail_pct*100)}%\n"
+            
+            # 如果是 Meme 這種不一樣的，加註災難底線
+            if stop_pct != trail_pct:
+                 msg += f"   (🛑 災難底線: {stop_price:.2f} / -{int(stop_pct*100)}%)\n"
+                 
         msg += "--------------------\n"
 
     if keeps:
@@ -353,7 +364,7 @@ def format_message(regime, sells, keeps, buys, swaps):
             msg += f"{emoji} {k['Symbol']} ({pnl:+.1f}%)\n"
             msg += f"   狀態: {zombie_msg}\n"
             msg += f"   🔥 動能: {k['Score']:.2f}\n"
-            msg += f"   📉 停利: 回撤 {limit_pct}% 出場\n"
+            msg += f"   👮 券商設定: 移動停利 {limit_pct}%\n"
     else:
         if not buys and not swaps:
             msg += "☕ 目前空手，好好休息\n"
@@ -366,17 +377,12 @@ if __name__ == "__main__":
     if res:
         regime, sells, keeps, buys, swaps = res
         
-        # 1. 載入舊持倉
         current_holdings = load_portfolio()
         
-        # 2. 移除賣出的 (包含 Swap 的 Sell)
         for s in sells:
             if s['Symbol'] in current_holdings:
                 del current_holdings[s['Symbol']]
         
-        # 3. 加入買入的 (包含 Swap 的 Buy)
-        # 實戰建議：這裡假設您會執行所有指令，因此直接更新 CSV。
-        # 如果您只跟單部分，請手動修改 CSV 或建立更複雜的確認機制。
         final_csv_buys = [{'Symbol': b['Symbol'], 'Price': b['Price']} for b in buys]
         update_portfolio_csv(current_holdings, final_csv_buys)
         
