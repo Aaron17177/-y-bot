@@ -13,11 +13,8 @@ warnings.filterwarnings("ignore")
 # ==========================================
 # 1. 參數設定 (V17.12 Apex Sniper - The Alpha Predator)
 # ==========================================
-# 策略核心：The Alpha Predator
-# 1. 攻擊：MSTR (比特幣槓桿代理) + RGTI/ASTS (成長爆發)
-# 2. 避險：TMF (美債) + NUGT (金礦) -> 提供資金停泊與避震
-# 3. 生態：保留高波動美股 (APP, NVDL) 維持輪動活性
 # 執行環境：GitHub Actions (Daily)
+# 核心邏輯：Multikill Mode (弒君換馬) + MSTR/SafeHaven 生態
 
 LINE_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
 LINE_USER_ID = os.getenv('LINE_USER_ID')
@@ -26,7 +23,7 @@ PORTFOLIO_FILE = 'portfolio.csv'
 USD_TWD_RATE = 32.5
 MAX_TOTAL_POSITIONS = 4
 
-# --- V17.12 參數配置 (含 SAFE_HAVEN) ---
+# --- V17.12 參數 (冠軍參數) ---
 SECTOR_PARAMS = {
     'CRYPTO_SPOT': {'stop': 0.40, 'zombie': 4,  'trail_1': 0.40, 'trail_2': 0.25, 'trail_3': 0.15},
     'CRYPTO_LEV':  {'stop': 0.50, 'zombie': 3,  'trail_1': 0.50, 'trail_2': 0.30, 'trail_3': 0.15},
@@ -38,15 +35,15 @@ SECTOR_PARAMS = {
     'TW_STOCK':    {'stop': 0.25, 'zombie': 8,  'trail_1': 0.25, 'trail_2': 0.15, 'trail_3': 0.10},
     'TW_LEV':      {'stop': 0.30, 'zombie': 6,  'trail_1': 0.30, 'trail_2': 0.20, 'trail_3': 0.10},
     'US_GROWTH':   {'stop': 0.40, 'zombie': 7,  'trail_1': 0.40, 'trail_2': 0.20, 'trail_3': 0.15},
-    'SAFE_HAVEN':  {'stop': 0.20, 'zombie': 10, 'trail_1': 0.20, 'trail_2': 0.10, 'trail_3': 0.05} # Tight stop for hedges
+    'SAFE_HAVEN':  {'stop': 0.20, 'zombie': 10, 'trail_1': 0.20, 'trail_2': 0.10, 'trail_3': 0.05}
 }
 
 # ==========================================
-# 2. 戰略資產池 (V17.12 Restored)
+# 2. 戰略資產池 (V17.12 The Alpha Predator)
 # ==========================================
 ASSET_MAP = {
     # --- 1. CRYPTO GODS ---
-    'MSTR': 'CRYPTO_LEV', # Alpha Predator
+    'MSTR': 'CRYPTO_LEV', # [NEW] King of Beta
     'MSTU': 'CRYPTO_LEV', 'CONL': 'CRYPTO_LEV', 'BITX': 'CRYPTO_LEV', 'ETHU': 'CRYPTO_MEME', 'WGMI': 'CRYPTO_LEV',
     'DOGE-USD': 'CRYPTO_MEME', 'SHIB-USD': 'CRYPTO_MEME', 'BONK-USD': 'CRYPTO_MEME', 'PEPE24478-USD': 'CRYPTO_MEME', 'WIF-USD': 'CRYPTO_MEME',
     'BTC-USD': 'CRYPTO_SPOT', 'ETH-USD': 'CRYPTO_SPOT',
@@ -57,8 +54,8 @@ ASSET_MAP = {
     'NVDL': 'LEV_2X', 'TSLL': 'LEV_2X', 'USD': 'LEV_2X', 'AMZU': 'LEV_2X', 'AAPU': 'LEV_2X',
 
     # --- 3. HEDGE / SAFE HAVEN ---
-    'TMF': 'SAFE_HAVEN', # Bond Bull
-    'NUGT': 'SAFE_HAVEN', # Gold Miners Bull
+    'TMF': 'SAFE_HAVEN', # [NEW] 20Y Treasury 3x Bull
+    'NUGT': 'SAFE_HAVEN', # [NEW] Gold Miners 2x Bull
 
     # --- 4. STOCKS ---
     'PLTR': 'US_GROWTH', 'SMCI': 'US_GROWTH', 'ARM': 'US_GROWTH', 'CRWD': 'US_GROWTH', 'PANW': 'US_GROWTH', 'SHOP': 'US_GROWTH',
@@ -66,24 +63,24 @@ ASSET_MAP = {
     'IONQ': 'US_GROWTH', 'RGTI': 'US_GROWTH', 'RKLB': 'US_GROWTH', 'VRT': 'US_GROWTH',
     'SNOW': 'US_GROWTH', 'VST': 'US_GROWTH', 'ASTS': 'US_GROWTH', 'OKLO': 'US_GROWTH', 'VKTX': 'US_GROWTH',
 
-    # --- 5. TW STOCKS (修正上櫃股代碼 .TW -> .TWO) ---
+    # --- 5. TW STOCKS (部分代表性標的，可自行增減) ---
     '2330.TW': 'TW_STOCK', '2317.TW': 'TW_STOCK', '2454.TW': 'TW_STOCK', '2382.TW': 'TW_STOCK',
     '3231.TW': 'TW_STOCK', '6669.TW': 'TW_STOCK', 
     '2603.TW': 'TW_STOCK', '2609.TW': 'TW_STOCK', '8996.TW': 'TW_STOCK',
     '6515.TW': 'TW_STOCK', '6442.TW': 'TW_STOCK', 
-    '8299.TWO': 'TW_STOCK', '3529.TWO': 'TW_STOCK', '3081.TWO': 'TW_STOCK', '6739.TWO': 'TW_STOCK', '6683.TWO': 'TW_STOCK',
+    '8299.TWO': 'TW_STOCK', '3529.TWO': 'TW_STOCK', '3081.TWO': 'TW_STOCK', '6739.TWO': 'TW_STOCK',
     '2359.TW': 'TW_STOCK', '3131.TWO': 'TW_STOCK', '3583.TW': 'TW_STOCK', '8054.TWO': 'TW_STOCK',
     '3661.TW': 'TW_STOCK', '3443.TW': 'TW_STOCK', '3035.TW': 'TW_STOCK', '5269.TW': 'TW_STOCK',
     '6531.TW': 'TW_STOCK', '2388.TW': 'TW_STOCK',
-    '6139.TW': 'TW_STOCK', '3017.TW': 'TW_STOCK', '1519.TW': 'TW_STOCK', '1503.TW': 'TW_STOCK'
+    '00631L.TW': 'TW_LEV'
 }
 
-# Extended Tier 1 List
+# Extended Tier 1 List (Score * 1.2)
 TIER_1_ASSETS = [
-    'MSTR', 
+    'MSTR', # Top Tier Addition
     'MSTU', 'CONL', 'NVDL', 'SOXL', 'BITX',
     'DOGE-USD', 'PEPE24478-USD',
-    '2330.TW',
+    '2330.TW', '00631L.TW',
     'PLTR', 'ETHU', 'ASTS', 'RGTI', 'BONK-USD', 'RENDER-USD',
     'SHIB-USD', 'WIF-USD', 'AVAX-USD', 'LABU'
 ]
@@ -102,19 +99,11 @@ def normalize_symbol(raw_symbol):
     }
     if raw_symbol in mapping: return mapping[raw_symbol]
 
-    # 自動修正台股代碼 (若 user 輸入 6683，自動判斷是否為上櫃)
     if raw_symbol.isdigit():
-        # 優先檢查是否在 WATCHLIST 中有對應的 .TWO 或 .TW
         for t in WATCHLIST:
-            if t.startswith(raw_symbol + '.'):
+            if ('.TW' in t or '.TWO' in t) and t.startswith(raw_symbol + '.'):
                 return t
-        # 預設
         return f"{raw_symbol}.TW"
-    
-    # 修正已存 csv 可能的錯誤 (例如存成 6683.TW 但應為 6683.TWO)
-    if raw_symbol.endswith('.TW') and raw_symbol.replace('.TW', '.TWO') in WATCHLIST:
-        return raw_symbol.replace('.TW', '.TWO')
-        
     return raw_symbol
 
 def get_sector(symbol):
@@ -159,13 +148,13 @@ def update_portfolio_csv(holdings, new_buys=None):
         print(f"❌ 更新 CSV 失敗: {e}")
 
 # ==========================================
-# 4. 分析引擎 (Multikill Live Engine)
+# 4. 分析引擎 (Multikill Live Engine V17.12)
 # ==========================================
 def analyze_market():
     portfolio = load_portfolio()
     all_tickers = list(set(BENCHMARKS + list(portfolio.keys()) + WATCHLIST))
 
-    print(f"📥 下載 {len(all_tickers)} 檔數據 (Multikill Mode)...")
+    print(f"📥 下載 {len(all_tickers)} 檔數據 (Apex Sniper V17.12)...")
     try:
         # 使用 auto_adjust=True 確保與回測價格一致
         data = yf.download(all_tickers, period="300d", progress=False, auto_adjust=True)
@@ -178,7 +167,7 @@ def analyze_market():
         print(f"❌ 數據下載失敗: {e}"); return None
 
     # --- 1. 計算指標 ---
-    current_prices = {t: closes[t].iloc[-1] for t in all_tickers if t in closes.columns and not pd.isna(closes[t].iloc[-1])}
+    current_prices = {t: closes[t].iloc[-1] for t in all_tickers if t in closes.columns}
 
     regime = {}
     if 'SPY' in closes.columns:
@@ -208,28 +197,33 @@ def analyze_market():
         ma50 = series.rolling(50).mean().iloc[-1]
 
         reason = ""
-        # A. 殭屍清除 (Stress Test 版本：純時間制)
-        if days_held > params['zombie'] and profit_pct <= 0:
-            reason = f"💤 殭屍清除 (持有{days_held}天未獲利)"
+        # A. 殭屍清除 (V17.12: 時間到達且未獲利即清除)
+        if days_held > params['zombie'] and curr_price <= entry_price:
+            reason = f"💤 殭屍清除 (> {params['zombie']}天且未獲利)"
 
-        # B. 分區冬眠 (SAFE_HAVEN 不受冬眠限制)
+        # B. 分區冬眠 (注意：避險資產 SAFE_HAVEN 通常不受冬眠影響，這裡簡單略過)
         elif sector != 'SAFE_HAVEN':
-             if 'CRYPTO' in sector and not regime.get('CRYPTO_BULL', True): reason = "❄️ 分區冬眠 (BTC < MA100)"
-             elif 'TW' in sector and not regime.get('TW_BULL', True): reason = "❄️ 分區冬眠 (TWII < MA60)"
-             elif 'US' in sector or 'LEV' in sector:
-                 if not regime.get('US_BULL', True): reason = "❄️ 分區冬眠 (SPY < MA200)"
+            if 'CRYPTO' in sector and not regime.get('CRYPTO_BULL', True): reason = "❄️ 分區冬眠 (BTC < MA100)"
+            elif 'TW' in sector and not regime.get('TW_BULL', True): reason = "❄️ 分區冬眠 (TWII < MA60)"
+            elif 'US' in sector and not regime.get('US_BULL', True): reason = "❄️ 分區冬眠 (SPY < MA200)"
 
         # C. 停利/止損計算
         limit = params['trail_1']
         if not reason:
+            # Tiered Trailing V17.12
             if profit_pct > 1.0: limit = params['trail_3']
             elif profit_pct > 0.3: limit = params['trail_2']
             else: limit = params['trail_1']
 
-            # 防禦機制 (Stress Test: Stop 與 Trail 同步)
+            trail_stop_price = curr_price # 在 Live 版我們通常用當前價格評估，或假設 trailing_high 是當前價格
+            # 簡化邏輯：若從最高點回撤超過 limit -> 賣出。但 Live Script 通常沒有紀錄 High。
+            # 替代方案：檢查 Hard Stop 與 MA 保護
+            
+            # 1. 硬止損
             if profit_pct < -params['stop']:
                 reason = f"🔴 觸及止損 ({profit_pct*100:.1f}%)"
-            elif sector in ['US_STOCK', 'TW_STOCK', 'US_GROWTH'] and curr_price < ma50:
+            # 2. 技術出場 (跌破季線) - Crypto 與 3X 通常不看這個，只看硬止損
+            elif sector in ['US_STOCK', 'TW_STOCK'] and curr_price < ma50:
                 reason = "❌ 跌破季線 (MA50)"
 
         # 計算得分 (用於換馬)
@@ -248,27 +242,23 @@ def analyze_market():
             keeps.append({'Symbol': symbol, 'Price': curr_price, 'Entry': entry_price, 'Score': score, 'Profit': profit_pct, 'Days': days_held, 'Sector': sector, 'TrailLimit': limit})
 
     # --- 3. 選股掃描 (Candidates) ---
-    # 定義板塊分類，確保掃描無死角
-    us_sectors = ['US_STOCK', 'US_LEV', 'US_GROWTH', 'LEV_3X', 'LEV_2X']
-    tw_sectors = ['TW_STOCK', 'TW_LEV']
-    crypto_sectors = ['CRYPTO_SPOT', 'CRYPTO_LEV', 'CRYPTO_MEME']
-    safe_sectors = ['SAFE_HAVEN']
-
     candidates = []
+    scan_pool = []
     
-    for t in WATCHLIST:
+    # 避險資產邏輯：如果大盤皆弱 (US & Crypto Bear)，則加入避險資產掃描
+    risk_off = not regime.get('US_BULL', True) and not regime.get('CRYPTO_BULL', True)
+    if risk_off:
+        scan_pool += [t for t in WATCHLIST if 'SAFE_HAVEN' in get_sector(t)]
+    
+    # 正常掃描
+    if regime.get('CRYPTO_BULL', True): scan_pool += [t for t in WATCHLIST if 'CRYPTO' in get_sector(t)]
+    if regime.get('US_BULL', True): scan_pool += [t for t in WATCHLIST if 'US' in get_sector(t) or 'SAFE_HAVEN' in get_sector(t)] # 允許混搭
+    if regime.get('TW_BULL', True): scan_pool += [t for t in WATCHLIST if 'TW' in get_sector(t)]
+    
+    scan_pool = list(set(scan_pool))
+
+    for t in scan_pool:
         if t in portfolio or t not in closes.columns: continue
-        sec = get_sector(t)
-
-        # 判斷是否加入掃描池 (Regime Filter)
-        is_candidate = False
-        if sec in crypto_sectors and regime.get('CRYPTO_BULL', True): is_candidate = True
-        elif sec in us_sectors and regime.get('US_BULL', True): is_candidate = True
-        elif sec in tw_sectors and regime.get('TW_BULL', True): is_candidate = True
-        elif sec in safe_sectors: is_candidate = True # 避險資產永遠掃描
-        
-        if not is_candidate: continue
-
         series = closes[t].dropna()
         if len(series) < 65: continue
 
@@ -277,67 +267,61 @@ def analyze_market():
         m50 = series.rolling(50).mean().iloc[-1]
         m60 = series.rolling(60).mean().iloc[-1]
 
-        # [V17] 進場濾網
+        # [V17.12] 趨勢濾網 (避險資產可稍微寬鬆，但這裡維持統一標準)
         if not (p > m20 and m20 > m50 and p > m60): continue
 
         mom_20 = series.pct_change(20).iloc[-1]
-        vol_20 = series.pct_change().rolling(20).std().iloc[-1] * np.sqrt(252)
-
-        # [V17] 成本過濾
-        if 'TW' in sec and mom_20 < 0.05: continue
-        if 'LEV_3X' in sec and mom_20 < 0.05: continue
+        
+        # [V17.12] 成本與動能過濾
+        sector = get_sector(t)
+        if 'TW' in sector and mom_20 < 0.05: continue
+        if 'LEV_3X' in sector and mom_20 < 0.05: continue
         if pd.isna(mom_20) or mom_20 <= 0: continue
+
+        vol_20 = series.pct_change().rolling(20).std().iloc[-1] * np.sqrt(252)
 
         mult = 1.0 + vol_20
         if t in TIER_1_ASSETS: mult *= 1.2
-        if 'ADR' in sec: mult *= 1.1
+        if 'ADR' in sector: mult *= 1.1
 
         final_score = mom_20 * mult
 
-        candidates.append({'Symbol': t, 'Price': p, 'Score': final_score, 'Sector': sec})
+        candidates.append({'Symbol': t, 'Price': p, 'Score': final_score, 'Sector': sector})
 
     candidates.sort(key=lambda x: x['Score'], reverse=True)
 
-    # --- 4. 弒君換馬 (Multikill Loop) ---
-    # 只要有爛股且有強股，就一直換，直到換不掉為止
+    # --- 4. 弒君換馬 (Multikill Loop V17.12) ---
     while keeps and candidates:
         worst_holding = min(keeps, key=lambda x: x['Score'])
         
-        # 找出目前沒被選中的最佳候選人 (排除已經在 swaps 中的)
         existing_targets = [s['Buy']['Symbol'] for s in swaps]
         available_candidates = [c for c in candidates if c['Symbol'] not in existing_targets]
         
-        if not available_candidates:
-            break
+        if not available_candidates: break
             
         best_candidate = available_candidates[0]
 
         vol_hold = closes[worst_holding['Symbol']].pct_change().rolling(20).std().iloc[-1] * np.sqrt(252)
         if pd.isna(vol_hold): vol_hold = 0
 
-        # Swap Threshold
+        # V17.12 Swap Threshold
         swap_thresh = 1.4 + (vol_hold * 0.1)
         swap_thresh = min(swap_thresh, 2.0)
 
         if best_candidate['Score'] > worst_holding['Score'] * swap_thresh:
-            # 觸發換馬
             swaps.append({
                 'Sell': worst_holding,
                 'Buy': best_candidate,
                 'Reason': f"Score {best_candidate['Score']:.2f} > {worst_holding['Score']:.2f} * {swap_thresh:.1f}"
             })
-            # 移除已處理的持倉，避免重複選取
             keeps = [k for k in keeps if k != worst_holding]
             sells.append({'Symbol': worst_holding['Symbol'], 'Price': worst_holding['Price'], 'Reason': "💀 弒君換馬", 'PnL': f"{worst_holding['Profit']*100:.1f}%", 'Sector': worst_holding['Sector']})
         else:
-            # 如果連最爛的都換不掉，那迴圈結束
             break
 
     # --- 5. 填補空位 (Fill Slots) ---
     buy_targets = [s['Buy'] for s in swaps]
-    
-    # 計算剩餘空位 (目前持倉數 = len(keeps), 已經扣掉了 swaps 的賣單)
-    open_slots = MAX_TOTAL_POSITIONS - len(keeps) - len(swaps)
+    open_slots = MAX_TOTAL_POSITIONS - len(keeps) - len(swaps) # Swaps 已經一賣一買抵銷，但這裡是計算新的 Buy List
     
     existing_buys = [b['Symbol'] for b in buy_targets]
     pool_idx = 0
@@ -363,8 +347,7 @@ def send_line_notify(msg):
         print(f"發送 LINE 失敗: {e}")
 
 def format_message(regime, sells, keeps, buys, swaps):
-    # 美化版 LINE 訊息
-    msg = f"🦁 **V17.12 Apex Sniper (Alpha Predator)**\n{datetime.now().strftime('%Y-%m-%d')}\n━━━━━━━━━━━━━━\n"
+    msg = f"🦁 **V17.12 Apex Sniper (The Alpha Predator)**\n{datetime.now().strftime('%Y-%m-%d')}\n━━━━━━━━━━━━━━\n"
     msg += f"🌍 市場環境\n"
     us = "🟢" if regime.get('US_BULL') else "❄️"
     cry = "🟢" if regime.get('CRYPTO_BULL') else "❄️"
@@ -379,7 +362,6 @@ def format_message(regime, sells, keeps, buys, swaps):
             msg += f"   損益: {s['PnL']}\n"
         msg += "--------------------\n"
 
-    # 顯示換馬配對資訊
     if swaps:
         msg += "💀 **【弒君換馬 (Multikill)】**\n"
         for s in swaps:
@@ -388,7 +370,6 @@ def format_message(regime, sells, keeps, buys, swaps):
             msg += f"   原因: {s['Reason']}\n"
         msg += "--------------------\n"
 
-    # 顯示所有需要執行的買入 (包含換馬的買入)
     if buys:
         msg += "🟢 **【執行買入】**\n"
         for b in buys:
@@ -432,7 +413,6 @@ if __name__ == "__main__":
     res = analyze_market()
     if res:
         regime, sells, keeps, buys, swaps = res
-
         current_holdings = load_portfolio()
 
         # 1. 執行賣出 (包含 Stop/Zombie/Swap Sells)
