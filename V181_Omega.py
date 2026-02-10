@@ -66,15 +66,16 @@ ASSET_MAP = {
     'IONQ': 'US_GROWTH', 'RGTI': 'US_GROWTH', 'RKLB': 'US_GROWTH', 'VRT': 'US_GROWTH',
     'SNOW': 'US_GROWTH', 'VST': 'US_GROWTH', 'ASTS': 'US_GROWTH', 'OKLO': 'US_GROWTH', 'VKTX': 'US_GROWTH',
 
-    # --- 5. TW STOCKS ---
+    # --- 5. TW STOCKS (修正上櫃股代碼 .TW -> .TWO) ---
     '2330.TW': 'TW_STOCK', '2317.TW': 'TW_STOCK', '2454.TW': 'TW_STOCK', '2382.TW': 'TW_STOCK',
     '3231.TW': 'TW_STOCK', '6669.TW': 'TW_STOCK', 
     '2603.TW': 'TW_STOCK', '2609.TW': 'TW_STOCK', '8996.TW': 'TW_STOCK',
     '6515.TW': 'TW_STOCK', '6442.TW': 'TW_STOCK', 
-    '8299.TWO': 'TW_STOCK', '3529.TWO': 'TW_STOCK', '3081.TWO': 'TW_STOCK', '6739.TWO': 'TW_STOCK',
+    '8299.TWO': 'TW_STOCK', '3529.TWO': 'TW_STOCK', '3081.TWO': 'TW_STOCK', '6739.TWO': 'TW_STOCK', '6683.TWO': 'TW_STOCK',
     '2359.TW': 'TW_STOCK', '3131.TWO': 'TW_STOCK', '3583.TW': 'TW_STOCK', '8054.TWO': 'TW_STOCK',
     '3661.TW': 'TW_STOCK', '3443.TW': 'TW_STOCK', '3035.TW': 'TW_STOCK', '5269.TW': 'TW_STOCK',
-    '6531.TW': 'TW_STOCK', '2388.TW': 'TW_STOCK'
+    '6531.TW': 'TW_STOCK', '2388.TW': 'TW_STOCK',
+    '6139.TW': 'TW_STOCK', '3017.TW': 'TW_STOCK', '1519.TW': 'TW_STOCK', '1503.TW': 'TW_STOCK'
 }
 
 # Extended Tier 1 List
@@ -101,11 +102,19 @@ def normalize_symbol(raw_symbol):
     }
     if raw_symbol in mapping: return mapping[raw_symbol]
 
+    # 自動修正台股代碼 (若 user 輸入 6683，自動判斷是否為上櫃)
     if raw_symbol.isdigit():
+        # 優先檢查是否在 WATCHLIST 中有對應的 .TWO 或 .TW
         for t in WATCHLIST:
-            if ('.TW' in t or '.TWO' in t) and t.startswith(raw_symbol + '.'):
+            if t.startswith(raw_symbol + '.'):
                 return t
+        # 預設
         return f"{raw_symbol}.TW"
+    
+    # 修正已存 csv 可能的錯誤 (例如存成 6683.TW 但應為 6683.TWO)
+    if raw_symbol.endswith('.TW') and raw_symbol.replace('.TW', '.TWO') in WATCHLIST:
+        return raw_symbol.replace('.TW', '.TWO')
+        
     return raw_symbol
 
 def get_sector(symbol):
