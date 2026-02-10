@@ -67,8 +67,8 @@ ASSET_MAP = {
     '2330.TW': 'TW_STOCK', '2317.TW': 'TW_STOCK', '2454.TW': 'TW_STOCK', '2382.TW': 'TW_STOCK',
     '3231.TW': 'TW_STOCK', '6669.TW': 'TW_STOCK', 
     '2603.TW': 'TW_STOCK', '2609.TW': 'TW_STOCK', '8996.TW': 'TW_STOCK',
-    '6515.TW': 'TW_STOCK', '6442.TW': 'TW_STOCK', '6683.TWO': 'TW_STOCK', # [Fix] Added 6683.TWO
-    '8299.TWO': 'TW_STOCK', '3529.TWO': 'TW_STOCK', '3081.TWO': 'TW_STOCK', '6739.TW': 'TW_STOCK', # [Fix] Corrected to .TW
+    '6515.TW': 'TW_STOCK', '6442.TW': 'TW_STOCK', '6683.TWO': 'TW_STOCK',
+    '8299.TWO': 'TW_STOCK', '3529.TWO': 'TW_STOCK', '3081.TWO': 'TW_STOCK', '6739.TWO': 'TW_STOCK', # [Fix] Reverted to .TWO for Yahoo
     '2359.TW': 'TW_STOCK', '3131.TWO': 'TW_STOCK', '3583.TW': 'TW_STOCK', '8054.TWO': 'TW_STOCK',
     '3661.TW': 'TW_STOCK', '3443.TW': 'TW_STOCK', '3035.TW': 'TW_STOCK', '5269.TW': 'TW_STOCK',
     '6531.TW': 'TW_STOCK', '2388.TW': 'TW_STOCK',
@@ -97,7 +97,7 @@ def normalize_symbol(raw_symbol):
     # [Fix] 強制修正常見錯誤代碼
     fix_map = {
         '6683.TW': '6683.TWO', # 雍智科技是上櫃
-        '6739.TWO': '6739.TW'  # AES-KY是上市
+        '6739.TW': '6739.TWO'  # AES-KY: 雖然是上市，但若 Yahoo .TW 抓不到，改回 .TWO
     }
     if raw_symbol in fix_map: return fix_map[raw_symbol]
 
@@ -126,7 +126,7 @@ def load_portfolio():
             next(reader, None) # Skip header
             for row in reader:
                 if not row or len(row) < 2: continue
-                symbol = normalize_symbol(row[0]) # 會自動修正 6683.TW -> 6683.TWO
+                symbol = normalize_symbol(row[0]) # 會自動修正
                 try:
                     entry_price = float(row[1])
                     entry_date = row[2] if len(row) > 2 else datetime.now().strftime('%Y-%m-%d')
