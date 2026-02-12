@@ -23,15 +23,16 @@ PORTFOLIO_FILE = 'portfolio.csv'
 USD_TWD_RATE = 32.5
 MAX_TOTAL_POSITIONS = 4
 
-# --- V17.21 參數 (Gold Rush) ---
+# --- V17.21 參數 (微調版) ---
+# [Update] 針對高波動槓桿放寬止損，避免過早被洗出場
 SECTOR_PARAMS = {
     'CRYPTO_SPOT': {'stop': 0.40, 'zombie': 4,  'trail_1': 0.40, 'trail_2': 0.25, 'trail_3': 0.15},
     'CRYPTO_LEV':  {'stop': 0.50, 'zombie': 3,  'trail_1': 0.50, 'trail_2': 0.30, 'trail_3': 0.15},
-    'CRYPTO_MEME': {'stop': 0.60, 'zombie': 3,  'trail_1': 0.60, 'trail_2': 0.30, 'trail_3': 0.15},
+    'CRYPTO_MEME': {'stop': 0.55, 'zombie': 3,  'trail_1': 0.55, 'trail_2': 0.30, 'trail_3': 0.15},
     'US_STOCK':    {'stop': 0.25, 'zombie': 8,  'trail_1': 0.25, 'trail_2': 0.15, 'trail_3': 0.10},
     'US_LEV':      {'stop': 0.35, 'zombie': 4,  'trail_1': 0.35, 'trail_2': 0.20, 'trail_3': 0.10},
-    'LEV_3X':      {'stop': 0.35, 'zombie': 3,  'trail_1': 0.35, 'trail_2': 0.20, 'trail_3': 0.10},
-    'LEV_2X':      {'stop': 0.40, 'zombie': 4,  'trail_1': 0.40, 'trail_2': 0.25, 'trail_3': 0.15},
+    'LEV_3X':      {'stop': 0.55, 'zombie': 3,  'trail_1': 0.55, 'trail_2': 0.30, 'trail_3': 0.15},
+    'LEV_2X':      {'stop': 0.50, 'zombie': 3,  'trail_1': 0.50, 'trail_2': 0.25, 'trail_3': 0.15},
     'TW_STOCK':    {'stop': 0.25, 'zombie': 8,  'trail_1': 0.25, 'trail_2': 0.15, 'trail_3': 0.10},
     'TW_LEV_ETF':  {'stop': 0.30, 'zombie': 5,  'trail_1': 0.30, 'trail_2': 0.20, 'trail_3': 0.10},
     'CN_LEV':      {'stop': 0.45, 'zombie': 4,  'trail_1': 0.45, 'trail_2': 0.30, 'trail_3': 0.15},
@@ -41,7 +42,7 @@ SECTOR_PARAMS = {
 }
 
 # ==========================================
-# 2. 戰略資產池 (V17.21 Gold Rush)
+# 2. 戰略資產池 (V17.21 Gold Rush - Optimized)
 # ==========================================
 ASSET_MAP = {
     # --- 1. CRYPTO GODS ---
@@ -60,8 +61,10 @@ ASSET_MAP = {
 
     # --- 2. US LEVERAGE ---
     'GGLL': 'LEV_2X',      
-    'FNGU': 'LEV_3X',  'LABU': 'LEV_3X',
-    'NVDL': 'LEV_2X', 'TSLL': 'LEV_2X', 'AAPU': 'LEV_2X',
+    'FNGU': 'LEV_3X',  'LABU': 'LEV_3X','COIG': 'LEV_2X', 'RGTX': 'LEV_2X',
+    'NVDL': 'LEV_2X', 'TSLL': 'LEV_2X', 'AAPU': 'LEV_2X','ASTX': 'LEV_2X',
+    'HOOX': 'LEV_2X', 'IONX': 'LEV_2X', 'OKLL': 'LEV_2X',
+    'RKLX': 'LEV_2X','PLTU': 'LEV_2X',
     'DPST': 'LEV_3X', 
 
     # --- 4. STOCKS ---
@@ -71,8 +74,8 @@ ASSET_MAP = {
     'IONQ': 'US_GROWTH', 'RGTI': 'US_GROWTH', 'RKLB': 'US_GROWTH', 'VRT': 'US_GROWTH',
     'VST': 'US_GROWTH', 'ASTS': 'US_GROWTH', 'OKLO': 'US_GROWTH', 'VKTX': 'US_GROWTH',
     'HOOD': 'US_GROWTH', 
-    'COIN': 'US_GROWTH',
     'SERV': 'US_GROWTH', 
+    'COIN': 'US_GROWTH', 
 
     # --- 5. TW STOCKS (Optimized) ---
     '2317.TW': 'TW_STOCK', '2454.TW': 'TW_STOCK', 
@@ -81,7 +84,7 @@ ASSET_MAP = {
     '8299.TWO': 'TW_STOCK', '3529.TWO': 'TW_STOCK', '3081.TWO': 'TW_STOCK', '6739.TWO': 'TW_STOCK',
     '2359.TW': 'TW_STOCK',  '3583.TW': 'TW_STOCK', '8054.TWO': 'TW_STOCK',
     '3661.TW': 'TW_STOCK', '3443.TW': 'TW_STOCK', '3035.TW': 'TW_STOCK',
-    '6531.TW': 'TW_STOCK','6683.TWO': 'TW_STOCK',
+    '6531.TW': 'TW_STOCK',
     '3324.TWO': 'TW_STOCK', 
     '2365.TW': 'TW_STOCK',  
 }
@@ -92,6 +95,9 @@ TIER_1_ASSETS = [
     'RGTI', 'QUBT', 'ASTS', 'IONQ', 'LUNR', 'RKLB', 
     'PLTR',  
     'VST',   
+    'RGTX','ASTX',
+    'HOOX', 'IONX', 'OKLL',
+    'RKLX','PLTU',
 
     # --- 2. ⚡ 加密貨幣心臟 (The Crypto Beta Kings) ---
     'ETHU',      
@@ -103,10 +109,17 @@ TIER_1_ASSETS = [
     '8299.TWO',  
     '6442.TW',   
     '2359.TW',   
-    '3583.TW'
+    '3583.TW',
+
+    # --- 4. 🛡️ 戰術避險 ---
+    'UGL' 
 ]
 
 WATCHLIST = list(ASSET_MAP.keys())
+# Tier 1 有 UGL 但 ASSET_MAP 沒有 (依照你的名單)，手動補上確保下載
+if 'UGL' in TIER_1_ASSETS and 'UGL' not in WATCHLIST:
+    WATCHLIST.append('UGL')
+
 BENCHMARKS = ['SPY', 'BTC-USD', '^TWII']
 
 # ==========================================
