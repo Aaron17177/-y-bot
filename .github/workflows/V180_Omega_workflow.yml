@@ -2,8 +2,9 @@ name: V181 Daily Strategy Run
 
 on:
   schedule:
-    # 台灣時間晚上 20:00 = UTC 12:00
-    - cron: '0 12 * * *'
+    # 台灣時間晚上 21:00 = UTC 13:00
+    #這時候台股已收盤(數據確認)，美股盤前剛好可以掛單
+    - cron: '0 13 * * *'
   
   # 允許手動觸發 (方便你隨時測試)
   workflow_dispatch:
@@ -34,5 +35,7 @@ jobs:
       env:
         LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
         LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
-      # 確保檔名與你 Repo 中的完全一致
+      # ⚠️ 重要檢查：
+      # 請確認你上傳到 GitHub 的 Python 檔名是否為 "V181_Omega.py"
+      # 如果你是用剛剛更新的 V17.21 版本，建議將檔案統一命名（例如改為 apex_sniper_live.py）並修改下方指令
       run: python "V181_Omega.py"
