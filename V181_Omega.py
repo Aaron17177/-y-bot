@@ -11,24 +11,25 @@ from datetime import datetime, timedelta
 warnings.filterwarnings("ignore")
 
 # ==========================================
-# 1. 參數設定 (V181 Omega - Final Strict Alignment)
+# 1. 參數設定 (V17.45 GitHub Live - Fixed FX Alignment)
 # ==========================================
-# 核心邏輯：V17.44 Strict Backtest (Bug Fix Version)
+# 核心邏輯：完全對齊 V181 Omega，僅修改匯率邏輯
 # 執行環境：GitHub Actions (Daily)
-# 特性：
-#   1. 100% 對齊回測邏輯 (移除 ADR 加權，修正 Asset Map)
-#   2. 實戰防護：匯率自動校正、代碼修正、即時匯率
+# 改動重點：
+#   1. [FIX] 匯率鎖定為 32.5，移除 USDTWD=X 下載 (避免 Index 偏移)
+#   2. [RESTORE] 恢復完整戰力池 (不刪除任何標的)
+#   3. [MERGE] 合併新申請的強勢股 (NVDA, AMD...)
 # ==========================================
 
 LINE_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
 LINE_USER_ID = os.getenv('LINE_USER_ID')
 PORTFOLIO_FILE = 'portfolio.csv'
 
-# [V181] 設定默認匯率 (當抓不到即時匯率時使用)
-DEFAULT_USD_TWD_RATE = 32.5
+# [核心修改] 強制固定匯率
+FIXED_USD_TWD_RATE = 32.5
 MAX_TOTAL_POSITIONS = 3
 
-# [V181] 黑名單 (已清空，由 normalize_symbol 處理錯誤代碼)
+# 黑名單
 BLACKLIST_TICKERS = [] 
 
 # --- 板塊參數 (V17.44 標準) ---
@@ -49,34 +50,37 @@ SECTOR_PARAMS = {
 }
 
 # ==========================================
-# 2. 戰略資產池 (V17.44 Asset Universe - STRICT)
+# 2. 戰略資產池 (Full Merged List)
 # ==========================================
-# [嚴格對齊] 只保留 V17.44 回測代碼中出現的項目
+# 包含您提供的原始列表 + 新增的強勢股
 ASSET_MAP = {
-    # Crypto
-    'MARA': 'CRYPTO_LEV', 'MSTR': 'CRYPTO_LEV', 'MSTX': 'CRYPTO_LEV',
-    'MSTU': 'CRYPTO_LEV', 'BITX': 'CRYPTO_LEV','CONL': 'CRYPTO_LEV',
-    'ETHU': 'CRYPTO_MEME', 'WGMI': 'CRYPTO_LEV', 'COIN': 'CRYPTO_LEV', 
-    # [Removed COIG]
+    # --- [New Strong Targets] ---
+    'NVDA': 'US_GROWTH', 'AMD': 'US_GROWTH', 'ARM': 'US_GROWTH', 'ALAB': 'US_GROWTH',
+    'UPST': 'US_GROWTH', 'AFRM': 'US_GROWTH', 'RDDT': 'US_GROWTH', 'S': 'US_GROWTH', 'NET': 'US_GROWTH',
+    'HIMS': 'US_GROWTH', 'CAVA': 'US_GROWTH',
 
-    # Crypto Spot
+    # --- [Original Crypto] ---
+    'MARA': 'CRYPTO_LEV', 'MSTR': 'CRYPTO_LEV', 'MSTX': 'CRYPTO_LEV',
+    'MSTU': 'CRYPTO_LEV', 'BITX': 'CRYPTO_LEV', 'CONL': 'CRYPTO_LEV',
+    'ETHU': 'CRYPTO_MEME', 'WGMI': 'CRYPTO_LEV', 'COIN': 'CRYPTO_LEV', 
+
+    # --- [Original Crypto Spot] (All Restored) ---
     'BTC-USD': 'CRYPTO_SPOT', 'ETH-USD': 'CRYPTO_SPOT', 'ADA-USD': 'CRYPTO_SPOT',
     'SOL-USD': 'CRYPTO_SPOT', 'AVAX-USD': 'CRYPTO_SPOT', 'NEAR-USD': 'CRYPTO_SPOT',
     'KAS-USD': 'CRYPTO_SPOT', 'RENDER-USD': 'CRYPTO_SPOT', 'HBAR-USD': 'CRYPTO_SPOT',
-    'OP-USD': 'CRYPTO_SPOT',
+    'OP-USD': 'CRYPTO_SPOT', 'SUI20947-USD': 'CRYPTO_SPOT',
 
-    # Meme
+    # --- [Original Meme] ---
     'DOGE-USD': 'CRYPTO_MEME', 'SHIB-USD': 'CRYPTO_MEME', 'BONK-USD': 'CRYPTO_MEME',
     'PEPE24478-USD': 'CRYPTO_MEME', 'WIF-USD': 'CRYPTO_MEME', 'FLOKI-USD': 'CRYPTO_MEME',
-    'SUI20947-USD': 'CRYPTO_SPOT', 'TAO22974-USD': 'CRYPTO_MEME', 'ENA-USD': 'CRYPTO_MEME',
+    'TAO22974-USD': 'CRYPTO_MEME', 'ENA-USD': 'CRYPTO_MEME',
 
-    # US Lev
+    # --- [Original US Lev] (GGLL Restored) ---
     'GGLL': 'LEV_2X', 'FNGU': 'LEV_3X', 'LABU': 'LEV_3X',
     'NVDL': 'LEV_2X', 'TSLL': 'LEV_2X', 'ASTX': 'LEV_2X',
     'HOOX': 'LEV_2X', 'IONX': 'LEV_2X', 
-    # [Removed OKLL, RKLX, PLTU, DPST]
 
-    # US Growth
+    # --- [Original US Growth] ---
     'LUNR': 'US_GROWTH', 'QUBT': 'US_GROWTH', 'NNE': 'US_GROWTH',
     'PLTR': 'US_GROWTH', 'SMCI': 'US_GROWTH', 'CRWD': 'US_GROWTH', 'PANW': 'US_GROWTH',
     'APP': 'US_GROWTH', 'SHOP': 'US_GROWTH',
@@ -84,7 +88,7 @@ ASSET_MAP = {
     'VST': 'US_GROWTH', 'ASTS': 'US_GROWTH', 'OKLO': 'US_GROWTH', 'VKTX': 'US_GROWTH',
     'HOOD': 'US_GROWTH', 'SERV': 'US_GROWTH',
 
-    # TW Stocks
+    # --- [Original TW Stocks] (8996 Restored) ---
     '2317.TW': 'TW_STOCK', '2454.TW': 'TW_STOCK', '2603.TW': 'TW_STOCK', '2609.TW': 'TW_STOCK', '8996.TW': 'TW_STOCK',
     '6442.TW': 'TW_STOCK', '6515.TW': 'TW_STOCK', '8299.TWO': 'TW_STOCK', '3529.TWO': 'TW_STOCK', '3081.TWO': 'TW_STOCK', '6739.TWO': 'TW_STOCK',
     '2359.TW': 'TW_STOCK', '3583.TW': 'TW_STOCK', '8054.TWO': 'TW_STOCK', '3661.TW': 'TW_STOCK', '3443.TW': 'TW_STOCK', '3035.TW': 'TW_STOCK',
@@ -96,6 +100,7 @@ TIER_1_ASSETS = [
     'HOOX', 'IONX', 'OKLL', 'RKLX', 'PLTU',
     'ETHU', 'CONL', 'MSTR', 'MSTU', 'DOGE-USD',
     '8299.TWO', '6442.TW', '2359.TW', '3583.TW',
+    'NVDA', # Added implicitly
 ]
 
 WATCHLIST = list(ASSET_MAP.keys())
@@ -104,15 +109,13 @@ for t in TIER_1_ASSETS:
         WATCHLIST.append(t)
 
 WATCHLIST = [t for t in WATCHLIST if t not in BLACKLIST_TICKERS]
+# [關鍵] 移除 USDTWD=X
 BENCHMARKS = ['SPY', 'QQQ', 'BTC-USD', 'ETH-USD', '^TWII', '^HSI', '^N225']
 
 # ==========================================
 # 3. 輔助函式
 # ==========================================
 def normalize_symbol(raw_symbol):
-    """
-    標準化代碼：強制將常見的上櫃公司代碼修正為 .TWO
-    """
     raw_symbol = str(raw_symbol).strip().upper()
     
     fix_map = {
@@ -146,7 +149,6 @@ def is_tw_symbol(sym: str) -> bool:
     return (".TW" in sym) or (".TWO" in sym)
 
 def get_sector(symbol):
-    # 回測中如果不在 ASSET_MAP，默認為 US_STOCK (適用於 OKLL 等 Tier 1 但不在 map 的標的)
     return ASSET_MAP.get(symbol, 'US_STOCK')
 
 def get_regime_index(symbol, sector):
@@ -200,9 +202,6 @@ def validate_data_point(symbol, df_row):
         o, h, l, c = df_row['Open'], df_row['High'], df_row['Low'], df_row['Close']
         v = df_row['Volume']
         
-        # 允許匯率商品成交量為 0
-        if symbol == 'USDTWD=X': return not (pd.isna(c) or c <= 0)
-
         if pd.isna(o) or pd.isna(h) or pd.isna(l) or pd.isna(c): return False
         if o <= 0 or h <= 0 or l <= 0 or c <= 0: return False
         if h < l: return False
@@ -212,30 +211,27 @@ def validate_data_point(symbol, df_row):
     except: return False
 
 # ==========================================
-# 4. 分析引擎 (V181 Omega)
+# 4. 分析引擎 (V17.45 Fixed FX Logic)
 # ==========================================
 def analyze_market():
     portfolio = load_portfolio()
-    all_tickers = list(set(BENCHMARKS + list(portfolio.keys()) + WATCHLIST + ['USDTWD=X']))
+    # [修改] 移除 USDTWD=X，避免下載時造成 Index 對齊問題
+    all_tickers = list(set(BENCHMARKS + list(portfolio.keys()) + WATCHLIST))
     all_tickers = [t for t in all_tickers if t not in BLACKLIST_TICKERS]
 
-    print(f"📥 下載 {len(all_tickers)} 檔數據 (V181 Omega + Dynamic FX)...")
+    print(f"📥 下載 {len(all_tickers)} 檔數據 (V17.45 + Fixed FX)...")
     try:
-        # [V17.44] auto_adjust=False，手動匯率
+        # [修改] 移除 auto_adjust=False 讓 yfinance 處理除權息? 
+        # 不，維持 auto_adjust=False 以匹配回測邏輯
         data = yf.download(all_tickers, period="400d", progress=False, auto_adjust=False, actions=False)
         if data.empty: return None
         
         if len(all_tickers) == 1:
-            closes = data['Close'].to_frame()
-            opens = data['Open'].to_frame()
-            lows = data['Low'].to_frame()
-            highs = data['High'].to_frame()
-            volumes = data['Volume'].to_frame()
-            closes.columns = [all_tickers[0]]
-            opens.columns = [all_tickers[0]]
-            lows.columns = [all_tickers[0]]
-            highs.columns = [all_tickers[0]]
-            volumes.columns = [all_tickers[0]]
+            closes = data['Close'].to_frame(); closes.columns = [all_tickers[0]]
+            opens = data['Open'].to_frame(); opens.columns = [all_tickers[0]]
+            lows = data['Low'].to_frame(); lows.columns = [all_tickers[0]]
+            highs = data['High'].to_frame(); highs.columns = [all_tickers[0]]
+            volumes = data['Volume'].to_frame(); volumes.columns = [all_tickers[0]]
         else:
             closes = data['Close'].ffill()
             opens = data['Open'].ffill()
@@ -243,21 +239,12 @@ def analyze_market():
             highs = data['High'].ffill()
             volumes = data['Volume'].ffill()
 
-        # [V181] 獲取即時匯率
-        live_rate = DEFAULT_USD_TWD_RATE
-        if 'USDTWD=X' in closes.columns:
-            rate_series = closes['USDTWD=X'].dropna()
-            if not rate_series.empty:
-                live_rate = rate_series.iloc[-1]
-                print(f"💱 即時匯率 (USDTWD): {live_rate:.2f}")
-            else:
-                print(f"⚠️ 無法取得匯率，使用默認值: {live_rate}")
-        else:
-            print(f"⚠️ 匯率代碼未下載，使用默認值: {live_rate}")
+        # [修改] 強制使用固定匯率轉換
+        live_rate = FIXED_USD_TWD_RATE
+        print(f"🔒 匯率鎖定: {live_rate} (Fixed for Momentum)")
 
-        # [V17.44] 手動匯率轉換 (使用 live_rate)
         for t in all_tickers:
-            if is_tw_symbol(t) and t != 'USDTWD=X':
+            if is_tw_symbol(t):
                 if t in closes.columns: closes[t] /= live_rate
                 if t in opens.columns: opens[t] /= live_rate
                 if t in lows.columns: lows[t] /= live_rate
@@ -283,8 +270,7 @@ def analyze_market():
         if validate_data_point(t, row):
             latest_data[t] = {'Close': row['Close'], 'Open': row['Open'], 'Low': row['Low'], 'Price': row['Close']}
         else:
-            if t != 'USDTWD=X':
-                print(f"⚠️ {t} 數據異常/停牌，跳過")
+            print(f"⚠️ {t} 數據異常/停牌，跳過")
 
     def get_benchmark_status(idx_symbol, ma_window):
         if idx_symbol not in closes.columns: return True 
@@ -310,10 +296,10 @@ def analyze_market():
         low_price = latest_data[symbol]['Low']
         entry_price = data['entry_price']
         
-        # [V181 關鍵修復] 自動偵測並修復幣值錯亂 (Auto Currency Patch)
+        # [修改] 針對固定匯率的幣值檢查
         if is_tw_symbol(symbol) and (entry_price / curr_price > 20.0):
-            print(f"🔧 [Fix] 偵測到 {symbol} 幣值錯亂 (Entry TWD:{entry_price:.0f} vs Current USD:{curr_price:.2f}) -> 自動修正計算")
-            entry_price /= live_rate
+             print(f"🔧 [Fix] 偵測到 {symbol} 成本為台幣 ({entry_price:.0f}) -> 自動轉為 USD (Rate: {live_rate})")
+             entry_price /= live_rate
 
         entry_date = datetime.strptime(data['entry_date'], '%Y-%m-%d')
         days_held = (datetime.now() - entry_date).days
@@ -367,7 +353,7 @@ def analyze_market():
         if not pd.isna(mom_20) and mom_20 > 0:
             mult = 1.0 + vol_20
             if symbol in TIER_1_ASSETS: mult *= 1.2
-            # [V17.44 嚴格對齊] 移除 ADR 加權
+            # [嚴格對齊] 不使用 ADR 加權
             score = mom_20 * mult
             if 'TW' in sector: score *= 0.9 
 
@@ -425,7 +411,6 @@ def analyze_market():
 
         mult = 1.0 + vol_20
         if t in TIER_1_ASSETS: mult *= 1.2
-        # [V17.44 嚴格對齊] 移除 ADR 加權
         
         final_score = mom_20 * mult
         if 'TW' in sector: final_score *= 0.9
@@ -479,8 +464,8 @@ def send_line_notify(msg):
     except Exception as e: print(f"發送 LINE 失敗: {e}")
 
 def format_message(regime, sells, keeps, buys, swaps, live_rate):
-    msg = f"🦁 **V181 Omega (Live Fix)**\n{datetime.now().strftime('%Y-%m-%d')}\n"
-    msg += f"💱 匯率: {live_rate:.2f}\n━━━━━━━━━━━━━━\n"
+    msg = f"🦁 **V17.45 Elite (Fixed FX)**\n{datetime.now().strftime('%Y-%m-%d')}\n"
+    msg += f"🔒 匯率鎖定: {live_rate:.2f}\n━━━━━━━━━━━━━━\n"
     msg += f"🌍 市場環境 (Regime)\n"
     key_indices = {'SPY': '美股', 'BTC-USD': '幣圈', '^TWII': '台股'}
     for k, name in key_indices.items():
