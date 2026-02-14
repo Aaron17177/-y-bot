@@ -54,11 +54,6 @@ SECTOR_PARAMS = {
 # ==========================================
 # 包含您提供的原始列表 + 新增的強勢股
 ASSET_MAP = {
-    # --- [New Strong Targets] ---
-    'NVDA': 'US_GROWTH', 'AMD': 'US_GROWTH', 'ARM': 'US_GROWTH', 'ALAB': 'US_GROWTH',
-    'UPST': 'US_GROWTH', 'AFRM': 'US_GROWTH', 'RDDT': 'US_GROWTH', 'S': 'US_GROWTH', 'NET': 'US_GROWTH',
-    'HIMS': 'US_GROWTH', 'CAVA': 'US_GROWTH',
-
     # --- [Original Crypto] ---
     'MARA': 'CRYPTO_LEV', 'MSTR': 'CRYPTO_LEV', 'MSTX': 'CRYPTO_LEV',
     'MSTU': 'CRYPTO_LEV', 'BITX': 'CRYPTO_LEV', 'CONL': 'CRYPTO_LEV',
