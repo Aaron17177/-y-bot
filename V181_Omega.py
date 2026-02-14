@@ -14,7 +14,7 @@ warnings.filterwarnings("ignore")
 # 1. 參數設定 (V17.44 Strict Live Engine)
 # ==========================================
 # 核心邏輯：V17.44 Strict Backtest (Bug Fix Version)
-# 執行環境：GitHub Actions (Daily)
+# 執行環境：GitHub Actions (Daily - Post Market)
 # ==========================================
 
 LINE_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
@@ -22,7 +22,7 @@ LINE_USER_ID = os.getenv('LINE_USER_ID')
 PORTFOLIO_FILE = 'portfolio.csv'
 
 USD_TWD_RATE = 32.5
-# [V17.44 設定] 最大持倉數改為 3
+# [V17.44 對齊] 最大持倉數設定為 3
 MAX_TOTAL_POSITIONS = 3
 
 # --- 板塊參數 (V17.44 標準) ---
@@ -45,11 +45,13 @@ SECTOR_PARAMS = {
 # ==========================================
 # 2. 戰略資產池 (V17.44 Asset Universe)
 # ==========================================
+# [注意] 完全對齊 V17.44 回測代碼中的清單
+# 某些在 Tier 1 的標的 (如 RGTX, OKLL) 若未在此處定義，將默認為 US_STOCK
 ASSET_MAP = {
-    # Crypto-related equities / levered crypto ETFs (Includes COIN, COIG)
+    # Crypto-related equities / levered crypto ETFs
     'MARA': 'CRYPTO_LEV', 'MSTR': 'CRYPTO_LEV', 'MSTX': 'CRYPTO_LEV',
-    'MSTU': 'CRYPTO_LEV', 'CONL': 'CRYPTO_LEV', 'BITX': 'CRYPTO_LEV',
-    'ETHU': 'CRYPTO_MEME', 'WGMI': 'CRYPTO_LEV', 'COIN': 'CRYPTO_LEV', 'COIG': 'CRYPTO_LEV',
+    'MSTU': 'CRYPTO_LEV', 'BITX': 'CRYPTO_LEV','CONL': 'CRYPTO_LEV',
+    'ETHU': 'CRYPTO_MEME', 'WGMI': 'CRYPTO_LEV', 'COIN': 'CRYPTO_LEV', 
 
     # Crypto spot
     'BTC-USD': 'CRYPTO_SPOT', 'ETH-USD': 'CRYPTO_SPOT', 'ADA-USD': 'CRYPTO_SPOT',
@@ -66,8 +68,8 @@ ASSET_MAP = {
     # US leverage (2x/3x)
     'GGLL': 'LEV_2X', 'FNGU': 'LEV_3X', 'LABU': 'LEV_3X',
     'NVDL': 'LEV_2X', 'TSLL': 'LEV_2X', 'ASTX': 'LEV_2X',
-    'HOOX': 'LEV_2X', 'IONX': 'LEV_2X', 'OKLL': 'LEV_2X', 'RKLX': 'LEV_2X',
-    'PLTU': 'LEV_2X', 'DPST': 'LEV_3X',
+    'HOOX': 'LEV_2X', 'IONX': 'LEV_2X',
+    # [回測代碼中 V17.44 此處無 OKLL, RKLX, PLTU, RGTX 等，故保持一致]
 
     # US growth
     'LUNR': 'US_GROWTH', 'QUBT': 'US_GROWTH', 'NNE': 'US_GROWTH',
@@ -93,6 +95,11 @@ TIER_1_ASSETS = [
 
 # 監控清單
 WATCHLIST = list(ASSET_MAP.keys())
+# 確保 Tier 1 中即使未在 ASSET_MAP 定義的標的也被監控 (會被默認為 US_STOCK)
+for t in TIER_1_ASSETS:
+    if t not in WATCHLIST:
+        WATCHLIST.append(t)
+
 BENCHMARKS = ['SPY', 'QQQ', 'BTC-USD', 'ETH-USD', '^TWII', '^HSI', '^N225']
 
 # ==========================================
@@ -103,7 +110,6 @@ def normalize_symbol(raw_symbol):
     fix_map = {'6683.TW': '6683.TWO', '6739.TW': '6739.TWO'}
     if raw_symbol in fix_map: return fix_map[raw_symbol]
     
-    # 兼容舊的 CSV 格式代碼
     mapping = {
         'PEPE': 'PEPE24478-USD', 'SHIB': 'SHIB-USD', 'DOGE': 'DOGE-USD',
         'BONK': 'BONK-USD', 'WIF': 'WIF-USD', 'RNDR': 'RENDER-USD'
@@ -173,7 +179,7 @@ def update_portfolio_csv(holdings, new_buys=None):
 
 # [V17.44 Strict Data Validation]
 def validate_data_point(symbol, df_row):
-    """嚴格檢查單日數據品質，對應 ohlc_sanity_mask"""
+    """嚴格檢查單日數據品質，對應回測的 ohlc_sanity_mask"""
     try:
         o = df_row['Open']
         h = df_row['High']
@@ -185,7 +191,7 @@ def validate_data_point(symbol, df_row):
         if o <= 0 or h <= 0 or l <= 0 or c <= 0: return False
         if h < l: return False # 數據錯誤
         
-        # 檢查 High/Low 比例是否過於離譜 (數據錯誤)
+        # 檢查 High/Low 比例是否過於離譜 (防止 YF 數據錯誤)
         if l > 0 and (h / l > 8.0): return False 
 
         if not is_crypto_symbol(symbol) and (pd.isna(v) or v <= 0):
@@ -202,15 +208,15 @@ def analyze_market():
     portfolio = load_portfolio()
     all_tickers = list(set(BENCHMARKS + list(portfolio.keys()) + WATCHLIST))
 
-    print(f"📥 下載 {len(all_tickers)} 檔數據 (V17.44 Strict Mode)...")
+    print(f"📥 下載 {len(all_tickers)} 檔數據 (V17.44 Strict Live Mode)...")
     try:
         # [V17.44 關鍵] auto_adjust=False，手動處理匯率
-        data = yf.download(all_tickers, period="300d", progress=False, auto_adjust=False, actions=False)
+        # 下載 400 天以確保 MA200 有足夠數據
+        data = yf.download(all_tickers, period="400d", progress=False, auto_adjust=False, actions=False)
         if data.empty: return None
         
-        # 處理 MultiIndex
+        # 處理 MultiIndex 結構
         if len(all_tickers) == 1:
-            # 只有一檔時，yf 返回的是沒有第二層 column 的 df，需手動構造
             closes = data['Close'].to_frame()
             opens = data['Open'].to_frame()
             lows = data['Low'].to_frame()
@@ -222,6 +228,7 @@ def analyze_market():
             highs.columns = [all_tickers[0]]
             volumes.columns = [all_tickers[0]]
         else:
+            # [Strict] 僅 ffill，不 bfill (避免偷看未來)
             closes = data['Close'].ffill()
             opens = data['Open'].ffill()
             lows = data['Low'].ffill()
@@ -239,15 +246,15 @@ def analyze_market():
     except Exception as e:
         print(f"❌ 數據下載失敗: {e}"); return None
 
-    # --- 1. 準備數據與指標 ---
+    # --- 1. 數據清洗與準備 ---
     sells = []; keeps = []; buys = []; swaps = []
     
-    # 取得每檔標的「最新一筆有效數據」的索引
+    # 取得每檔標的「最新一筆有效數據」
     latest_data = {} 
     
     for t in all_tickers:
         if t not in closes.columns: continue
-        # 建立臨時 DataFrame 檢查最後一筆數據
+        
         last_idx = closes.index[-1]
         row = {
             'Open': opens.loc[last_idx, t],
@@ -261,16 +268,16 @@ def analyze_market():
         if validate_data_point(t, row):
             latest_data[t] = {
                 'Close': row['Close'],
-                'Open': row['Open'], # 用於模擬計算
-                'Low': row['Low'],   # 用於止損檢查
+                'Open': row['Open'], 
+                'Low': row['Low'],   
                 'Price': row['Close']
             }
         else:
             print(f"⚠️ {t} 今日數據異常或無交易，跳過分析")
 
-    # 基準指數判斷 (Regime Check Logic)
+    # 基準指數判斷 (Regime Check)
     def get_benchmark_status(idx_symbol, ma_window):
-        if idx_symbol not in closes.columns: return True # 若無數據預設為 True 避免卡死，但實戰應有數據
+        if idx_symbol not in closes.columns: return True 
         series = closes[idx_symbol].dropna()
         if len(series) < ma_window: return True
         p = series.iloc[-1]
@@ -289,10 +296,10 @@ def analyze_market():
 
     # --- 2. 持倉健檢 (Phase 0 & 1) ---
     for symbol, data in portfolio.items():
-        if symbol not in latest_data: continue # 無今日數據，跳過檢查 (保持持倉)
+        if symbol not in latest_data: continue # 無今日數據，保持持倉
         
         curr_price = latest_data[symbol]['Close']
-        low_price = latest_data[symbol]['Low'] # 用於模擬盤中觸發止損
+        low_price = latest_data[symbol]['Low'] # 盤中最低價
         entry_price = data['entry_price']
         entry_date = datetime.strptime(data['entry_date'], '%Y-%m-%d')
         days_held = (datetime.now() - entry_date).days
@@ -302,11 +309,8 @@ def analyze_market():
 
         profit_pct = (curr_price - entry_price) / entry_price
         
-        # 取得歷史高點 (模擬 Trailing High)
-        # 實戰中只能用 Recent High 來近似，取持有期間內的最高 Close
+        # 實戰中用 "持有期間內的最高 Close" 近似 Trailing High
         hist_series = closes[symbol].dropna()
-        # 簡單起見，取最近 60 天最高價當作 Trailing High 的近似
-        # V17.44 回測中是紀錄真實 Trailing High，實戰用近期高點代替
         recent_high = hist_series.tail(min(days_held + 1, 60)).max() 
         trailing_high = max(recent_high, curr_price)
 
@@ -324,7 +328,6 @@ def analyze_market():
         # C. 分區冬眠 (Regime) - V17.44 Phase 1
         elif sector not in ['SAFE_HAVEN', 'HEDGE_LEV']:
             regime_idx = get_regime_index(symbol, sector)
-            # 檢查 Check Regime Pass 邏輯
             pass_regime = True
             msg = ""
             
@@ -342,7 +345,7 @@ def analyze_market():
             if not pass_regime:
                 reason = f"❄️ 分區冬眠 ({msg})"
 
-        # D. 移動停利 (Trailing Stop) - V17.44 Phase 1 (Signal Gen)
+        # D. 移動停利 (Trailing Stop) - V17.44 Phase 1
         if not reason:
             if profit_pct > 1.0: limit = 1 - params['trail_3']
             elif profit_pct > 0.3: limit = 1 - params['trail_2']
@@ -364,15 +367,14 @@ def analyze_market():
         if not pd.isna(mom_20) and mom_20 > 0:
             mult = 1.0 + vol_20
             if symbol in TIER_1_ASSETS: mult *= 1.2
-            # ADR Check (簡單判斷)
-            if 'ADR' in sector: mult *= 1.1
+            if 'ADR' in sector: mult *= 1.1 
             score = mom_20 * mult
-            if 'TW' in sector: score *= 0.9
+            if 'TW' in sector: score *= 0.9 
 
         if reason:
             sells.append({'Symbol': symbol, 'Price': curr_price, 'Reason': reason, 'PnL': f"{profit_pct*100:.1f}%", 'Sector': sector})
         else:
-            limit_display = params['trail_1'] # Default display
+            limit_display = params['trail_1']
             if profit_pct > 0.3: limit_display = params['trail_2']
             if profit_pct > 1.0: limit_display = params['trail_3']
             keeps.append({'Symbol': symbol, 'Price': curr_price, 'Entry': entry_price, 'Score': score, 'Profit': profit_pct, 'Days': days_held, 'Sector': sector, 'TrailLimit': limit_display})
@@ -380,13 +382,11 @@ def analyze_market():
     # --- 3. 選股掃描 (Candidates - V17.44 Phase 2) ---
     candidates = []
     
-    # Exclude logic handled by EXCLUDED_SECTORS=[] (already empty in V17.44)
-    
     for t in WATCHLIST:
-        if t in portfolio or t not in latest_data: continue # 已持倉或無數據
+        if t in portfolio or t not in latest_data: continue 
         
         series = closes[t].dropna()
-        if len(series) < 65: continue # 確保有足夠數據算 MA60
+        if len(series) < 65: continue 
 
         p = series.iloc[-1]
         m20 = series.rolling(20).mean().iloc[-1]
@@ -411,7 +411,6 @@ def analyze_market():
             spy_series = closes['SPY'].dropna()
             if len(spy_series) > 20: spy_ret = spy_series.pct_change(20).iloc[-1]
             
-        # Crypto & US Tech don't need to beat SPY, others do
         if regime_idx not in ['QQQ', 'BTC-USD', 'SPY']:
             if idx_ret < spy_ret: continue
 
@@ -425,7 +424,7 @@ def analyze_market():
 
         mom_20 = series.pct_change(20).iloc[-1]
         
-        # [V17.44] Hurdles
+        # [V17.44] Hurdles (門檻)
         if 'TW' in sector and mom_20 < 0.08: continue 
         if 'LEV_3X' in sector and mom_20 < 0.05: continue
         if 'LEV_2X' in sector and mom_20 < 0.02: continue
@@ -436,6 +435,7 @@ def analyze_market():
 
         mult = 1.0 + vol_20
         if t in TIER_1_ASSETS: mult *= 1.2
+        if 'ADR' in sector: mult *= 1.1
         
         final_score = mom_20 * mult
         if 'TW' in sector: final_score *= 0.9
@@ -475,9 +475,6 @@ def analyze_market():
 
     # --- 5. 填補空位 (Fill Slots - V17.44 Phase 6) ---
     buy_targets = [s['Buy'] for s in swaps]
-    
-    # 這裡的邏輯是：預期持倉數 = (目前持倉 - 待賣出) + 待買入
-    # 所以空位 = MAX - (len(keeps) + len(swaps))
     open_slots = MAX_TOTAL_POSITIONS - len(keeps) - len(swaps) 
     
     existing_buys = [b['Symbol'] for b in buy_targets]
@@ -505,9 +502,8 @@ def send_line_notify(msg):
 
 def format_message(regime, sells, keeps, buys, swaps):
     msg = f"🦁 **V17.44 Apex Sniper (Strict Live)**\n{datetime.now().strftime('%Y-%m-%d')}\n━━━━━━━━━━━━━━\n"
-    msg += f"🌍 市場環境 (Regime Check)\n"
+    msg += f"🌍 市場環境 (Regime)\n"
     
-    # 簡化顯示
     key_indices = {'SPY': '美股', 'BTC-USD': '幣圈', '^TWII': '台股'}
     for k, name in key_indices.items():
         status = "🟢" if regime.get(k, False) else "❄️"
@@ -535,7 +531,6 @@ def format_message(regime, sells, keeps, buys, swaps):
         for b in buys:
             params = SECTOR_PARAMS.get(b['Sector'], SECTOR_PARAMS['US_STOCK'])
             stop_pct = params['stop']
-            trail_pct = params['trail_1']
             stop_price = b['Price'] * (1 - stop_pct)
 
             msg += f"💰 買入: {b['Symbol']}\n"
@@ -550,7 +545,6 @@ def format_message(regime, sells, keeps, buys, swaps):
         for k in keeps:
             pnl = k['Profit'] * 100
             emoji = "😍" if pnl > 20 else "😐" if pnl > 0 else "🤢"
-            params = SECTOR_PARAMS.get(k['Sector'], SECTOR_PARAMS['US_STOCK'])
             limit_pct = int(k['TrailLimit'] * 100)
             msg += f"{emoji} {k['Symbol']} ({pnl:+.1f}%)\n"
             msg += f"   🔥 動能: {k['Score']:.2f}\n"
@@ -568,17 +562,15 @@ if __name__ == "__main__":
         regime, sells, keeps, buys, swaps = res
         current_holdings = load_portfolio()
 
-        # 1. 執行賣出 (包含 Stop/Zombie/Swap Sells)
-        # 注意：實戰中這裡只是更新 CSV 狀態，實際下單需人工或 Broker API
+        # 1. 執行賣出 (更新 CSV 狀態)
         for s in sells:
             if s['Symbol'] in current_holdings:
                 del current_holdings[s['Symbol']]
 
-        # 2. 執行買入 (包含 Swap Buys/New Buys)
+        # 2. 執行買入 (更新 CSV 狀態)
         final_csv_buys = [{'Symbol': b['Symbol'], 'Price': b['Price']} for b in buys]
         
-        # 更新 CSV (模擬成交)
-        # 實戰建議：可以在這裡加一個開關，決定是否自動更新 CSV，或是等確認成交後手動更新
+        # 更新 CSV (模擬 Pending Order 已記錄，等待成交)
         update_portfolio_csv(current_holdings, final_csv_buys)
 
         # 發送通知
