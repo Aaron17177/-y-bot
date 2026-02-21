@@ -1,8 +1,8 @@
 # =========================================================
 # V17.50 VANGUARD LIVE ENGINE (純淨先鋒實務佈署版)
+# 修正內容: 解決 Slot 計算錯誤導致超買問題 (CR_FIX_03)
 # 修正內容: 解決 Catch-up 期間指令重複堆疊問題 (CR_FIX_02)
 # 修正內容: 解決 RuntimeError 字典遍歷衝突 (CR_FIX_01)
-# 對齊內容: 恢復 TIER_1_ASSETS 包含 2X 槓桿與台股特權
 # =========================================================
 
 import yfinance as yf
@@ -74,7 +74,6 @@ ASSET_MAP = {
     '6531.TW': 'TW_STOCK', '3324.TWO': 'TW_STOCK',
 }
 
-# [對齊] 您指定的戰力池
 TIER_1_ASSETS = [
     'RGTI', 'QUBT', 'ASTS', 'IONQ', 'LUNR', 'RKLB', 'PLTR', 'VST', 'RGTX', 'ASTX',
     'HOOX', 'IONX', 'OKLL', 'RKLX', 'PLTU',
@@ -283,7 +282,6 @@ def run_live(dry_run=False):
         for sym, pos in positions.items():
             if not is_trading_day.loc[tomorrow, sym]: continue
             if curr_vix > 45.0: 
-                # [FIX] 防止重複加入 SELL 指令
                 if not any(o['type'] == 'SELL' and o['symbol'] == sym for o in orders_queue):
                     orders_queue.append({'type': 'SELL', 'symbol': sym, 'reason': "VIX>45斷路"})
                 holdings_to_sell.append(sym); continue
@@ -319,7 +317,6 @@ def run_live(dry_run=False):
             b_score = scores.loc[tomorrow, best]
             v_hold = vol_20.loc[tomorrow, worst] if not pd.isna(vol_20.loc[tomorrow, worst]) else 0.0
             if b_score > w_score * min(2.0, 1.4 + v_hold*0.1) and b_score > w_score + 0.05:
-                # [FIX] 防止重複加入 Swap 指令
                 if not any(o['type'] == 'SELL' and o['symbol'] == worst for o in orders_queue):
                     orders_queue.append({'type': 'SELL', 'symbol': worst, 'reason': f"Swap to {best}"})
                 if not any(o['type'] == 'BUY' and o['symbol'] == best for o in orders_queue):
@@ -327,7 +324,12 @@ def run_live(dry_run=False):
                 proj.remove(worst); proj.append(best); active_holdings.pop(0); candidates.pop(valid_idx)
             else: break
             
-        open_slots = MAX_TOTAL_POSITIONS - len(active_holdings) + len([o for o in orders_queue if o['type']=='SELL' and o['symbol'] in active_holdings])
+        # [FIX_03] 修正 Slot 計算：必須扣除已經在隊列中準備買入的標的數量
+        pending_sells = len([o for o in orders_queue if o['type']=='SELL' and o['symbol'] in active_holdings])
+        pending_buys = len([o for o in orders_queue if o['type']=='BUY']) # 新增這行
+        
+        open_slots = MAX_TOTAL_POSITIONS - len(active_holdings) + pending_sells - pending_buys
+        
         for _ in range(max(0, open_slots)):
             if not candidates or curr_vix > PANIC_VIX_THRESHOLD: break
             valid_idx = next((i for i, c in enumerate(candidates) if is_allowed(c)), -1)
@@ -339,7 +341,6 @@ def run_live(dry_run=False):
                 
         state['last_processed_date'] = tomorrow.strftime('%Y-%m-%d')
 
-    # 最後的執行完畢後，清空重複項
     unique_orders = []
     seen = set()
     for o in orders_queue:
@@ -371,11 +372,11 @@ def run_live(dry_run=False):
     buys = [o for o in orders_queue if o['type'] == 'BUY']
     
     if sells:
-        msg += "🔴 【賣出指令】(請於開盤賣出)\n"
+        msg += "🔴 【賣出指令】(請於明日開盤賣出)\n"
         for s in sells: msg += f"❌ 賣出 {s['symbol']} (原因: {s.get('reason','')})\n"
         msg += "--------------------\n"
     if buys:
-        msg += "🟢 【買入指令】(請於開盤買入)\n"
+        msg += "🟢 【買入指令】(請於明日開盤買入)\n"
         for b in buys:
             params = SECTOR_PARAMS.get(get_sector(b['symbol']), SECTOR_PARAMS['DEFAULT'])
             curr_p = close[b['symbol']].iloc[-1] if b['symbol'] in close.columns and not pd.isna(close[b['symbol']].iloc[-1]) else 0
