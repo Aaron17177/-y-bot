@@ -1,7 +1,167 @@
 {
-    "cash": 1000.0,
-    "positions": {},
-    "orders_queue": [],
-    "cooldown_dict": {},
-    "last_processed_date": "2024-01-01"
+    "cash": 434.83075671093474,
+    "positions": {
+        "6442.TW": {
+            "symbol": "6442.TW",
+            "entry_date": "2026-01-30",
+            "entry_price": 56.0718965090783,
+            "units": 2.0861696903374027,
+            "sector": "TW_STOCK",
+            "max_price": 63.53502398371779,
+            "current_price": 61.94664838412485
+        },
+        "8996.TW": {
+            "symbol": "8996.TW",
+            "entry_date": "2026-02-02",
+            "entry_price": 22.74749060680778,
+            "units": 23.64905938225331,
+            "sector": "TW_STOCK",
+            "max_price": 30.353726241086235,
+            "current_price": 28.78136586462416
+        },
+        "6739.TWO": {
+            "symbol": "6739.TWO",
+            "entry_date": "2026-02-03",
+            "entry_price": 28.81252484495329,
+            "units": 19.152180011370884,
+            "sector": "TW_STOCK",
+            "max_price": 28.913357407918035,
+            "current_price": 27.06592021706378
+        }
+    },
+    "orders_queue": [
+        {
+            "type": "SELL",
+            "symbol": "6739.TWO",
+            "reason": "Swap to 3529.TWO"
+        },
+        {
+            "type": "SELL",
+            "symbol": "6739.TWO",
+            "reason": "Swap to 3529.TWO"
+        },
+        {
+            "type": "SELL",
+            "symbol": "6739.TWO",
+            "reason": "Swap to 3529.TWO"
+        },
+        {
+            "type": "SELL",
+            "symbol": "6739.TWO",
+            "reason": "Swap to 3529.TWO"
+        },
+        {
+            "type": "SELL",
+            "symbol": "6739.TWO",
+            "reason": "Swap to 3529.TWO"
+        },
+        {
+            "type": "SELL",
+            "symbol": "6739.TWO",
+            "reason": "Swap to 3324.TWO"
+        },
+        {
+            "type": "SELL",
+            "symbol": "6739.TWO",
+            "reason": "Swap to 3324.TWO"
+        },
+        {
+            "type": "SELL",
+            "symbol": "6739.TWO",
+            "reason": "Swap to 3324.TWO"
+        },
+        {
+            "type": "SELL",
+            "symbol": "6739.TWO",
+            "reason": "Swap to 3324.TWO"
+        },
+        {
+            "type": "BUY",
+            "symbol": "3529.TWO",
+            "amount_usd": 587.5550893652486
+        },
+        {
+            "type": "BUY",
+            "symbol": "3529.TWO",
+            "amount_usd": 470.0565199325518
+        },
+        {
+            "type": "BUY",
+            "symbol": "3324.TWO",
+            "amount_usd": 470.0565199325518
+        },
+        {
+            "type": "BUY",
+            "symbol": "3529.TWO",
+            "amount_usd": 470.06896971061144
+        },
+        {
+            "type": "BUY",
+            "symbol": "3324.TWO",
+            "amount_usd": 470.06896971061144
+        },
+        {
+            "type": "BUY",
+            "symbol": "3529.TWO",
+            "amount_usd": 470.0814208265214
+        },
+        {
+            "type": "BUY",
+            "symbol": "3324.TWO",
+            "amount_usd": 470.0814208265214
+        },
+        {
+            "type": "BUY",
+            "symbol": "3529.TWO",
+            "amount_usd": 470.0938732804256
+        },
+        {
+            "type": "BUY",
+            "symbol": "3324.TWO",
+            "amount_usd": 470.0938732804256
+        },
+        {
+            "type": "BUY",
+            "symbol": "3324.TWO",
+            "amount_usd": 470.1063270724679
+        },
+        {
+            "type": "BUY",
+            "symbol": "3529.TWO",
+            "amount_usd": 470.1063270724679
+        },
+        {
+            "type": "BUY",
+            "symbol": "3324.TWO",
+            "amount_usd": 470.11878220279186
+        },
+        {
+            "type": "BUY",
+            "symbol": "3324.TWO",
+            "amount_usd": 587.6640483394268
+        },
+        {
+            "type": "BUY",
+            "symbol": "3324.TWO",
+            "amount_usd": 470.1436964788604
+        },
+        {
+            "type": "SELL",
+            "symbol": "6739.TWO",
+            "reason": "Swap to 3324.TWO"
+        },
+        {
+            "type": "BUY",
+            "symbol": "3324.TWO",
+            "amount_usd": 587.6951945311159
+        }
+    ],
+    "cooldown_dict": {
+        "RKLX": "2025-12-30",
+        "IONX": "2025-09-26",
+        "OKLL": "2025-10-22",
+        "ASTX": "2025-12-27",
+        "8299.TWO": "2026-02-08"
+    },
+    "last_processed_date": "2026-02-20"
 }
