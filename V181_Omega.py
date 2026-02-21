@@ -1,525 +1,367 @@
+# =========================================================
+# V17.50 VANGUARD LIVE ENGINE (純淨先鋒實盤引擎)
+# 核心機制: Shadow State (影子狀態追蹤) + Catch-up Loop (防斷線追趕)
+# 執行環境: GitHub Actions (Daily 13:00 UTC / 台灣 21:00)
+# =========================================================
+
 import yfinance as yf
 import pandas as pd
 import numpy as np
-import requests
-import os
-import csv
 import warnings
-from datetime import datetime, timedelta
+import json
+import os
+import argparse
+import requests
+from datetime import datetime
 
-# 忽略不必要的警告
 warnings.filterwarnings("ignore")
 
-# ==========================================
-# 1. 參數設定 (V17.45 GitHub Live - Fixed FX Alignment)
-# ==========================================
-# 核心邏輯：完全對齊 V181 Omega，僅修改匯率邏輯
-# 執行環境：GitHub Actions (Daily)
-# 改動重點：
-#   1. [FIX] 匯率鎖定為 32.5，移除 USDTWD=X 下載 (避免 Index 偏移)
-#   2. [RESTORE] 恢復完整戰力池 (不刪除任何標的)
-#   3. [MERGE] 合併新申請的強勢股 (NVDA, AMD...)
-# ==========================================
-
-LINE_ACCESS_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
-LINE_USER_ID = os.getenv('LINE_USER_ID')
-PORTFOLIO_FILE = 'portfolio.csv'
-
-# [核心修改] 強制固定匯率
-FIXED_USD_TWD_RATE = 32.5
-MAX_TOTAL_POSITIONS = 3
-
-# 黑名單
-BLACKLIST_TICKERS = [] 
-
-# --- 板塊參數 (V17.44 標準) ---
-SECTOR_PARAMS = {
-    'CRYPTO_SPOT': {'stop': 0.40, 'zombie': 4,  'trail_1': 0.40, 'trail_2': 0.25, 'trail_3': 0.15},
-    'CRYPTO_LEV':  {'stop': 0.50, 'zombie': 3,  'trail_1': 0.50, 'trail_2': 0.30, 'trail_3': 0.15},
-    'CRYPTO_MEME': {'stop': 0.55, 'zombie': 3,  'trail_1': 0.55, 'trail_2': 0.30, 'trail_3': 0.15},
-    'US_STOCK':    {'stop': 0.25, 'zombie': 8,  'trail_1': 0.25, 'trail_2': 0.15, 'trail_3': 0.10},
-    'US_LEV':      {'stop': 0.35, 'zombie': 4,  'trail_1': 0.35, 'trail_2': 0.20, 'trail_3': 0.10},
-    'LEV_3X':      {'stop': 0.55, 'zombie': 3,  'trail_1': 0.55, 'trail_2': 0.30, 'trail_3': 0.15},
-    'LEV_2X':      {'stop': 0.50, 'zombie': 3,  'trail_1': 0.50, 'trail_2': 0.25, 'trail_3': 0.15},
-    'TW_STOCK':    {'stop': 0.25, 'zombie': 8,  'trail_1': 0.25, 'trail_2': 0.15, 'trail_3': 0.10},
-    'US_GROWTH':   {'stop': 0.40, 'zombie': 7,  'trail_1': 0.40, 'trail_2': 0.20, 'trail_3': 0.15},
-    'TW_LEV_ETF':  {'stop': 0.30, 'zombie': 5,  'trail_1': 0.30, 'trail_2': 0.20, 'trail_3': 0.10},
-    'CN_LEV':      {'stop': 0.45, 'zombie': 4,  'trail_1': 0.45, 'trail_2': 0.30, 'trail_3': 0.15},
-    'HEDGE_LEV':   {'stop': 0.25, 'zombie': 2,  'trail_1': 0.25, 'trail_2': 0.10, 'trail_3': 0.05},
-    'SAFE_HAVEN':  {'stop': 0.20, 'zombie': 10, 'trail_1': 0.20, 'trail_2': 0.10, 'trail_3': 0.05}
+# =========================
+# 1) Configuration & Secrets
+# =========================
+DATA_DOWNLOAD_DAYS = 250 # 實盤只需取近 250 天維持 MA 運算即可
+SLIPPAGE_RATE = 0.002
+RATES = {
+    'CRYPTO_COMM': 0.001, 'US_COMM': 0.001, 'TW_COMM': 0.001425 * 0.22,
+    'TW_TAX_STOCK': 0.003, 'TW_TAX_ETF': 0.001
 }
 
-# ==========================================
-# 2. 戰略資產池 (Full Merged List)
-# ==========================================
-# 包含您提供的原始列表 + 新增的強勢股
-ASSET_MAP = {
-    # --- [Original Crypto] ---
-    'MARA': 'CRYPTO_LEV', 'MSTR': 'CRYPTO_LEV', 'MSTX': 'CRYPTO_LEV',
-    'MSTU': 'CRYPTO_LEV', 'BITX': 'CRYPTO_LEV', 'CONL': 'CRYPTO_LEV',
-    'ETHU': 'CRYPTO_MEME', 'WGMI': 'CRYPTO_LEV', 'COIN': 'CRYPTO_LEV', 
+GAP_UP_LIMIT = 0.10
+PANIC_VIX_THRESHOLD = 40.0
+MIN_HOLD_DAYS = 3
+USD_TWD_RATE = 32.5 # 備用靜態匯率
+INITIAL_CAPITAL_USD = 100000.0 / USD_TWD_RATE
+MAX_TOTAL_POSITIONS = 3
+BASE_POSITION_SIZE = 1.0 / MAX_TOTAL_POSITIONS
 
-    # --- [Original Crypto Spot] (All Restored) ---
-    'BTC-USD': 'CRYPTO_SPOT', 'ETH-USD': 'CRYPTO_SPOT', 'ADA-USD': 'CRYPTO_SPOT',
+STATE_FILE = 'state.json'
+LINE_TOKEN = os.getenv('LINE_CHANNEL_ACCESS_TOKEN')
+LINE_USER_ID = os.getenv('LINE_USER_ID')
+
+# =========================
+# 2) Strategy Parameters (對齊 V17.50 最終版)
+# =========================
+SECTOR_PARAMS = {
+    'CRYPTO_SPOT': {'stop': 0.40, 'zombie': 10, 'trail': {2.0: 0.25, 1.0: 0.30, 0.5: 0.35, 0.0: 0.40}},
+    'CRYPTO_LEV':  {'stop': 0.50, 'zombie': 8,  'trail': {3.0: 0.30, 1.0: 0.40, 0.5: 0.45, 0.0: 0.50}},
+    'CRYPTO_MEME': {'stop': 0.60, 'zombie': 5,  'trail': {5.0: 0.30, 2.0: 0.40, 1.0: 0.50, 0.0: 0.60}},
+    'US_STOCK':    {'stop': 0.25, 'zombie': 10, 'trail': {1.0: 0.15, 0.5: 0.20, 0.2: 0.20, 0.0: 0.25}},
+    'US_LEV':      {'stop': 0.35, 'zombie': 8,  'trail': {1.0: 0.20, 0.5: 0.25, 0.2: 0.30, 0.0: 0.35}},
+    'LEV_3X':      {'stop': 0.45, 'zombie': 5,  'trail': {2.0: 0.25, 1.0: 0.30, 0.5: 0.35, 0.0: 0.45}},
+    'TW_STOCK':    {'stop': 0.25, 'zombie': 12, 'trail': {1.0: 0.15, 0.5: 0.20, 0.2: 0.20, 0.0: 0.25}},
+    'US_GROWTH':   {'stop': 0.40, 'zombie': 10, 'trail': {1.0: 0.25, 0.5: 0.30, 0.2: 0.35, 0.0: 0.40}},
+    'DEFAULT':     {'stop': 0.30, 'zombie': 10, 'trail': {1.0: 0.20, 0.5: 0.25, 0.0: 0.30}}
+}
+
+ASSET_MAP = {
+    'BTC-USD': 'CRYPTO_SPOT', 'ADA-USD': 'CRYPTO_SPOT',
     'SOL-USD': 'CRYPTO_SPOT', 'AVAX-USD': 'CRYPTO_SPOT', 'NEAR-USD': 'CRYPTO_SPOT',
     'KAS-USD': 'CRYPTO_SPOT', 'RENDER-USD': 'CRYPTO_SPOT', 'HBAR-USD': 'CRYPTO_SPOT',
-    'OP-USD': 'CRYPTO_SPOT', 'SUI20947-USD': 'CRYPTO_SPOT',
-
-    # --- [Original Meme] ---
     'DOGE-USD': 'CRYPTO_MEME', 'SHIB-USD': 'CRYPTO_MEME', 'BONK-USD': 'CRYPTO_MEME',
     'PEPE24478-USD': 'CRYPTO_MEME', 'WIF-USD': 'CRYPTO_MEME', 'FLOKI-USD': 'CRYPTO_MEME',
-    'TAO22974-USD': 'CRYPTO_MEME', 'ENA-USD': 'CRYPTO_MEME',
-
-    # --- [Original US Lev] (GGLL Restored) ---
-    'GGLL': 'LEV_2X', 'FNGU': 'LEV_3X', 'LABU': 'LEV_3X',
-    'NVDL': 'LEV_2X', 'TSLL': 'LEV_2X', 'ASTX': 'LEV_2X',
-    'HOOX': 'LEV_2X', 'IONX': 'LEV_2X', 
-
-    # --- [Original US Growth] ---
-    'LUNR': 'US_GROWTH', 'QUBT': 'US_GROWTH', 'NNE': 'US_GROWTH',
+    'SUI20947-USD': 'CRYPTO_SPOT', 'TAO22974-USD': 'CRYPTO_MEME', 'ENA-USD': 'CRYPTO_MEME',
+    'GGLL': 'LEV_2X', 'FNGU': 'LEV_3X',
+    'NVDL': 'LEV_2X', 'ASTX': 'LEV_2X',
+    'HOOX': 'LEV_2X', 'IONX': 'LEV_2X', 'OKLL': 'LEV_2X', 'RKLX': 'LEV_2X',
+    'LUNR': 'US_GROWTH', 'QUBT': 'US_GROWTH',
     'PLTR': 'US_GROWTH', 'SMCI': 'US_GROWTH', 'CRWD': 'US_GROWTH', 'PANW': 'US_GROWTH',
     'APP': 'US_GROWTH', 'SHOP': 'US_GROWTH',
     'IONQ': 'US_GROWTH', 'RGTI': 'US_GROWTH', 'RKLB': 'US_GROWTH', 'VRT': 'US_GROWTH',
     'VST': 'US_GROWTH', 'ASTS': 'US_GROWTH', 'OKLO': 'US_GROWTH', 'VKTX': 'US_GROWTH',
     'HOOD': 'US_GROWTH', 'SERV': 'US_GROWTH',
-
-    # --- [Original TW Stocks] (8996 Restored) ---
-    '2317.TW': 'TW_STOCK', '2454.TW': 'TW_STOCK', '2603.TW': 'TW_STOCK', '2609.TW': 'TW_STOCK', '8996.TW': 'TW_STOCK',
-    '6442.TW': 'TW_STOCK', '6515.TW': 'TW_STOCK', '8299.TWO': 'TW_STOCK', '3529.TWO': 'TW_STOCK', '3081.TWO': 'TW_STOCK', '6739.TWO': 'TW_STOCK',
-    '2359.TW': 'TW_STOCK', '3583.TW': 'TW_STOCK', '8054.TWO': 'TW_STOCK', '3661.TW': 'TW_STOCK', '3443.TW': 'TW_STOCK', '3035.TW': 'TW_STOCK',
-    '6531.TW': 'TW_STOCK', '3324.TWO': 'TW_STOCK', '2365.TW': 'TW_STOCK',
+    'GLD': 'US_STOCK',
+    '2317.TW': 'TW_STOCK', '2603.TW': 'TW_STOCK', '2609.TW': 'TW_STOCK', '8996.TW': 'TW_STOCK',
+    '6442.TW': 'TW_STOCK', '8299.TWO': 'TW_STOCK', '3529.TWO': 'TW_STOCK', '6739.TWO': 'TW_STOCK',
+    '2359.TW': 'TW_STOCK', '8054.TWO': 'TW_STOCK', '3035.TW': 'TW_STOCK',
+    '6531.TW': 'TW_STOCK', '3324.TWO': 'TW_STOCK',
 }
 
 TIER_1_ASSETS = [
     'RGTI', 'QUBT', 'ASTS', 'IONQ', 'LUNR', 'RKLB', 'PLTR', 'VST', 'RGTX', 'ASTX',
     'HOOX', 'IONX', 'OKLL', 'RKLX', 'PLTU',
-    'ETHU', 'CONL', 'MSTR', 'MSTU', 'DOGE-USD',
-    '8299.TWO', '6442.TW', '2359.TW', '3583.TW',
-    'NVDA', # Added implicitly
+    'DOGE-USD', 'BONK-USD', 'WIF-USD', 'KAS-USD', 'RENDER-USD',
+    '8299.TWO', '6442.TW', '2359.TW'
 ]
 
-WATCHLIST = list(ASSET_MAP.keys())
-for t in TIER_1_ASSETS:
-    if t not in WATCHLIST:
-        WATCHLIST.append(t)
+ALL_TICKERS = list(set(list(ASSET_MAP.keys()) + ['SPY', 'QQQ', 'BTC-USD', '^TWII', '^HSI', '^VIX', 'TWD=X']))
 
-WATCHLIST = [t for t in WATCHLIST if t not in BLACKLIST_TICKERS]
-# [關鍵] 移除 USDTWD=X
-BENCHMARKS = ['SPY', 'QQQ', 'BTC-USD', 'ETH-USD', '^TWII', '^HSI', '^N225']
+# =========================
+# 3) Live State & Position Engine
+# =========================
+class Position:
+    def __init__(self, symbol, entry_date, entry_price, units, sector, max_price=None, current_price=None):
+        self.symbol = symbol
+        self.entry_date = entry_date if isinstance(entry_date, pd.Timestamp) else pd.Timestamp(entry_date)
+        self.entry_price = float(entry_price)
+        self.units = float(units)
+        self.sector = sector
+        self.max_price = float(max_price) if max_price else float(entry_price)
+        self.current_price = float(current_price) if current_price else float(entry_price)
 
-# ==========================================
-# 3. 輔助函式
-# ==========================================
-def normalize_symbol(raw_symbol):
-    raw_symbol = str(raw_symbol).strip().upper()
-    
-    fix_map = {
-        '6683.TW': '6683.TWO', '6683': '6683.TWO',
-        '6739.TW': '6739.TWO', '6739': '6739.TWO',
-        '3081.TW': '3081.TWO', '3081': '3081.TWO',
-        '3529.TW': '3529.TWO', '3529': '3529.TWO',
-        '8299.TW': '8299.TWO', '8299': '8299.TWO',
-        '8054.TW': '8054.TWO', '8054': '8054.TWO',
-        '3324.TW': '3324.TWO', '3324': '3324.TWO'
-    }
-    if raw_symbol in fix_map: return fix_map[raw_symbol]
-    
-    mapping = {
-        'PEPE': 'PEPE24478-USD', 'SHIB': 'SHIB-USD', 'DOGE': 'DOGE-USD',
-        'BONK': 'BONK-USD', 'WIF': 'WIF-USD', 'RNDR': 'RENDER-USD'
-    }
-    if raw_symbol in mapping: return mapping[raw_symbol]
+    @classmethod
+    def from_dict(cls, data):
+        return cls(data['symbol'], data['entry_date'], data['entry_price'], 
+                   data['units'], data['sector'], data.get('max_price'), data.get('current_price'))
 
-    if raw_symbol.isdigit():
-        for t in WATCHLIST:
-            if ('.TW' in t or '.TWO' in t) and t.startswith(raw_symbol + '.'):
-                return t
-        return f"{raw_symbol}.TW"
-    return raw_symbol
-
-def is_crypto_symbol(sym: str) -> bool:
-    return sym.endswith("-USD")
-
-def is_tw_symbol(sym: str) -> bool:
-    return (".TW" in sym) or (".TWO" in sym)
-
-def get_sector(symbol):
-    return ASSET_MAP.get(symbol, 'US_STOCK')
-
-def get_regime_index(symbol, sector):
-    if 'CRYPTO' in sector: return 'BTC-USD'
-    if 'CN_' in sector or symbol in ['YINN', 'CWEB']: return '^HSI'
-    if 'JP_' in sector: return '^N225'
-    if 'TW_' in sector or is_tw_symbol(symbol): return '^TWII'
-    return 'QQQ'
-
-def load_portfolio():
-    holdings = {}
-    if not os.path.exists(PORTFOLIO_FILE): return holdings
-    try:
-        with open(PORTFOLIO_FILE, mode='r', encoding='utf-8-sig') as f:
-            reader = csv.reader(f)
-            next(reader, None) 
-            for row in reader:
-                if not row or len(row) < 2: continue
-                symbol = normalize_symbol(row[0])
-                try:
-                    entry_price = float(row[1])
-                    entry_date = row[2] if len(row) > 2 else datetime.now().strftime('%Y-%m-%d')
-                    holdings[symbol] = {'entry_price': entry_price, 'entry_date': entry_date}
-                except ValueError: continue
-        return holdings
-    except Exception: return {}
-
-def update_portfolio_csv(holdings, new_buys=None):
-    try:
-        data_to_write = []
-        for symbol, data in holdings.items():
-            data_to_write.append([symbol, data['entry_price'], data['entry_date']])
-
-        if new_buys:
-            today = datetime.now().strftime('%Y-%m-%d')
-            for buy in new_buys:
-                if not any(row[0] == buy['Symbol'] for row in data_to_write):
-                    data_to_write.append([buy['Symbol'], buy['Price'], today])
-
-        with open(PORTFOLIO_FILE, 'w', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            writer.writerow(['Symbol', 'EntryPrice', 'EntryDate'])
-            writer.writerows(data_to_write)
-        print("✅ Portfolio CSV 已更新")
-    except Exception as e:
-        print(f"❌ 更新 CSV 失敗: {e}")
-
-def validate_data_point(symbol, df_row):
-    """嚴格檢查單日數據品質 (V17.44 Logic)"""
-    try:
-        o, h, l, c = df_row['Open'], df_row['High'], df_row['Low'], df_row['Close']
-        v = df_row['Volume']
-        
-        if pd.isna(o) or pd.isna(h) or pd.isna(l) or pd.isna(c): return False
-        if o <= 0 or h <= 0 or l <= 0 or c <= 0: return False
-        if h < l: return False
-        if l > 0 and (h / l > 8.0): return False 
-        if not is_crypto_symbol(symbol) and (pd.isna(v) or v <= 0): return False
-        return True
-    except: return False
-
-# ==========================================
-# 4. 分析引擎 (V17.45 Fixed FX Logic)
-# ==========================================
-def analyze_market():
-    portfolio = load_portfolio()
-    # [修改] 移除 USDTWD=X，避免下載時造成 Index 對齊問題
-    all_tickers = list(set(BENCHMARKS + list(portfolio.keys()) + WATCHLIST))
-    all_tickers = [t for t in all_tickers if t not in BLACKLIST_TICKERS]
-
-    print(f"📥 下載 {len(all_tickers)} 檔數據 (V17.45 + Fixed FX)...")
-    try:
-        # [修改] 移除 auto_adjust=False 讓 yfinance 處理除權息? 
-        # 不，維持 auto_adjust=False 以匹配回測邏輯
-        data = yf.download(all_tickers, period="400d", progress=False, auto_adjust=False, actions=False)
-        if data.empty: return None
-        
-        if len(all_tickers) == 1:
-            closes = data['Close'].to_frame(); closes.columns = [all_tickers[0]]
-            opens = data['Open'].to_frame(); opens.columns = [all_tickers[0]]
-            lows = data['Low'].to_frame(); lows.columns = [all_tickers[0]]
-            highs = data['High'].to_frame(); highs.columns = [all_tickers[0]]
-            volumes = data['Volume'].to_frame(); volumes.columns = [all_tickers[0]]
-        else:
-            closes = data['Close'].ffill()
-            opens = data['Open'].ffill()
-            lows = data['Low'].ffill()
-            highs = data['High'].ffill()
-            volumes = data['Volume'].ffill()
-
-        # [修改] 強制使用固定匯率轉換
-        live_rate = FIXED_USD_TWD_RATE
-        print(f"🔒 匯率鎖定: {live_rate} (Fixed for Momentum)")
-
-        for t in all_tickers:
-            if is_tw_symbol(t):
-                if t in closes.columns: closes[t] /= live_rate
-                if t in opens.columns: opens[t] /= live_rate
-                if t in lows.columns: lows[t] /= live_rate
-                if t in highs.columns: highs[t] /= live_rate
-
-    except Exception as e:
-        print(f"❌ 數據下載失敗: {e}"); return None
-
-    # --- 1. 準備數據 ---
-    sells = []; keeps = []; buys = []; swaps = []
-    latest_data = {} 
-    
-    for t in all_tickers:
-        if t not in closes.columns: continue
-        last_idx = closes.index[-1]
-        row = {
-            'Open': opens.loc[last_idx, t],
-            'High': highs.loc[last_idx, t],
-            'Low': lows.loc[last_idx, t],
-            'Close': closes.loc[last_idx, t],
-            'Volume': volumes.loc[last_idx, t] if t in volumes.columns else 0
+    def to_dict(self):
+        return {
+            'symbol': self.symbol, 'entry_date': self.entry_date.strftime('%Y-%m-%d'),
+            'entry_price': self.entry_price, 'units': self.units,
+            'sector': self.sector, 'max_price': self.max_price, 'current_price': self.current_price
         }
-        if validate_data_point(t, row):
-            latest_data[t] = {'Close': row['Close'], 'Open': row['Open'], 'Low': row['Low'], 'Price': row['Close']}
-        else:
-            print(f"⚠️ {t} 數據異常/停牌，跳過")
 
-    def get_benchmark_status(idx_symbol, ma_window):
-        if idx_symbol not in closes.columns: return True 
-        series = closes[idx_symbol].dropna()
-        if len(series) < ma_window: return True
-        return series.iloc[-1] > series.rolling(ma_window).mean().iloc[-1]
+    def get_params(self): return SECTOR_PARAMS.get(self.sector, SECTOR_PARAMS['DEFAULT'])
 
-    regime_status = {
-        'QQQ': get_benchmark_status('QQQ', 200),
-        'SPY': get_benchmark_status('SPY', 200),
-        'BTC-USD': get_benchmark_status('BTC-USD', 100),
-        'ETH-USD': get_benchmark_status('ETH-USD', 100),
-        '^TWII': get_benchmark_status('^TWII', 60),
-        '^HSI': get_benchmark_status('^HSI', 60),
-        '^N225': get_benchmark_status('^N225', 60)
+    @property
+    def market_value(self): return self.units * self.current_price
+
+    def check_intraday_exit(self, open_p, high_p, low_p, curr_vix=20.0):
+        params = self.get_params()
+        stop_threshold = self.entry_price * (1 - params['stop'])
+        effective_peak = max(self.max_price, open_p)
+        profit_ratio = (effective_peak - self.entry_price) / self.entry_price
+        trail_pct = params['stop']
+
+        for threshold, pct in sorted(params['trail'].items(), key=lambda x: x[0], reverse=True):
+            if profit_ratio >= threshold:
+                trail_pct = pct; break
+
+        if curr_vix > 30.0: trail_pct *= 0.5
+        trail_price = effective_peak * (1 - trail_pct)
+        final_exit_price = max(trail_price, stop_threshold)
+
+        if open_p < final_exit_price:
+            return True, open_p, "GAP_STOP" if open_p < stop_threshold else "GAP_TRAIL"
+        if low_p <= final_exit_price:
+            return True, final_exit_price, "HARD_STOP" if final_exit_price == stop_threshold else f"TRAIL_EXIT"
+        
+        if high_p > self.max_price: self.max_price = high_p
+        return False, 0.0, ""
+
+def load_state():
+    if os.path.exists(STATE_FILE):
+        with open(STATE_FILE, 'r') as f:
+            return json.load(f)
+    # 預設狀態
+    return {
+        "cash": INITIAL_CAPITAL_USD, "positions": {}, "orders_queue": [], "cooldown_dict": {},
+        "last_processed_date": (datetime.utcnow() - pd.Timedelta(days=5)).strftime('%Y-%m-%d')
     }
 
-    # --- 2. 持倉健檢 ---
-    for symbol, data in portfolio.items():
-        if symbol not in latest_data: continue 
-        
-        curr_price = latest_data[symbol]['Close']
-        low_price = latest_data[symbol]['Low']
-        entry_price = data['entry_price']
-        
-        # [修改] 針對固定匯率的幣值檢查
-        if is_tw_symbol(symbol) and (entry_price / curr_price > 20.0):
-             print(f"🔧 [Fix] 偵測到 {symbol} 成本為台幣 ({entry_price:.0f}) -> 自動轉為 USD (Rate: {live_rate})")
-             entry_price /= live_rate
+def save_state(state):
+    with open(STATE_FILE, 'w') as f:
+        json.dump(state, f, indent=4)
 
-        entry_date = datetime.strptime(data['entry_date'], '%Y-%m-%d')
-        days_held = (datetime.now() - entry_date).days
-        sector = get_sector(symbol)
-        params = SECTOR_PARAMS.get(sector, SECTOR_PARAMS['US_STOCK'])
-
-        profit_pct = (curr_price - entry_price) / entry_price
-        
-        hist_series = closes[symbol].dropna()
-        recent_high = hist_series.tail(min(days_held + 1, 60)).max() 
-        trailing_high = max(recent_high, curr_price)
-
-        reason = ""
-        
-        # A. Stop Loss
-        hard_stop_price = entry_price * (1 - params['stop'])
-        if low_price <= hard_stop_price:
-             reason = f"🔴 觸及止損 (Low:{low_price:.2f} <= Stop:{hard_stop_price:.2f})"
-
-        # B. Zombie
-        elif days_held > params['zombie'] and curr_price <= entry_price:
-            reason = f"💤 殭屍清除 (> {params['zombie']}天且未獲利)"
-
-        # C. Regime
-        elif sector not in ['SAFE_HAVEN', 'HEDGE_LEV']:
-            regime_idx = get_regime_index(symbol, sector)
-            pass_regime = True
-            msg = ""
-            if regime_idx in regime_status and not regime_status[regime_idx]:
-                pass_regime = False; msg = f"{regime_idx} < MA"
-            if sector in ['CRYPTO_SPOT', 'CRYPTO_MEME'] and symbol not in ['BTC-USD', 'ETH-USD']:
-                if not regime_status['ETH-USD']: pass_regime = False; msg = "ETH < MA"
-
-            if not pass_regime: reason = f"❄️ 分區冬眠 ({msg})"
-
-        # D. Trailing & MA50
-        if not reason:
-            if profit_pct > 1.0: limit = 1 - params['trail_3']
-            elif profit_pct > 0.3: limit = 1 - params['trail_2']
-            else: limit = 1 - params['trail_1']
-            
-            if curr_price < trailing_high * limit:
-                reason = f"🛡️ 階梯停利 (回撤 > {(1-limit)*100:.0f}%)"
-            
-            ma50 = hist_series.rolling(50).mean().iloc[-1]
-            if curr_price < ma50: reason = "❌ 跌破季線 (MA50)"
-
-        mom_20 = hist_series.pct_change(20).iloc[-1]
-        vol_20 = hist_series.pct_change().rolling(20).std().iloc[-1] * np.sqrt(252)
-        score = 0
-        if not pd.isna(mom_20) and mom_20 > 0:
-            mult = 1.0 + vol_20
-            if symbol in TIER_1_ASSETS: mult *= 1.2
-            # [嚴格對齊] 不使用 ADR 加權
-            score = mom_20 * mult
-            if 'TW' in sector: score *= 0.9 
-
-        if reason:
-            sells.append({'Symbol': symbol, 'Price': curr_price, 'Reason': reason, 'PnL': f"{profit_pct*100:.1f}%", 'Sector': sector})
-        else:
-            limit_display = params['trail_1']
-            if profit_pct > 0.3: limit_display = params['trail_2']
-            if profit_pct > 1.0: limit_display = params['trail_3']
-            keeps.append({'Symbol': symbol, 'Price': curr_price, 'Entry': entry_price, 'Score': score, 'Profit': profit_pct, 'Days': days_held, 'Sector': sector, 'TrailLimit': limit_display})
-
-    # --- 3. 選股掃描 ---
-    candidates = []
-    for t in WATCHLIST:
-        if t in portfolio or t not in latest_data: continue 
-        
-        series = closes[t].dropna()
-        if len(series) < 65: continue 
-
-        p = series.iloc[-1]
-        m20 = series.rolling(20).mean().iloc[-1]
-        m50 = series.rolling(50).mean().iloc[-1]
-        m60 = series.rolling(60).mean().iloc[-1]
-
-        if not (p > m20 and m20 > m50 and p > m60): continue # 趨勢濾網
-
-        sector = get_sector(t)
-        regime_idx = get_regime_index(t, sector)
-        
-        idx_ret = 0; spy_ret = 0
-        if regime_idx in closes.columns:
-            idx_s = closes[regime_idx].dropna()
-            if len(idx_s) > 20: idx_ret = idx_s.pct_change(20).iloc[-1]
-        if 'SPY' in closes.columns:
-            spy_s = closes['SPY'].dropna()
-            if len(spy_s) > 20: spy_ret = spy_s.pct_change(20).iloc[-1]
-            
-        if regime_idx not in ['QQQ', 'BTC-USD', 'SPY']:
-            if idx_ret < spy_ret: continue
-
-        pass_regime = True
-        if regime_idx in regime_status and not regime_status[regime_idx]: pass_regime = False
-        if sector in ['CRYPTO_SPOT', 'CRYPTO_MEME'] and t not in ['BTC-USD', 'ETH-USD']:
-             if not regime_status['ETH-USD']: pass_regime = False
-        if not pass_regime: continue
-
-        mom_20 = series.pct_change(20).iloc[-1]
-        if 'TW' in sector and mom_20 < 0.08: continue 
-        if 'LEV_3X' in sector and mom_20 < 0.05: continue
-        if 'LEV_2X' in sector and mom_20 < 0.02: continue
-        if pd.isna(mom_20) or mom_20 <= 0: continue
-
-        vol_20 = series.pct_change().rolling(20).std().iloc[-1] * np.sqrt(252)
-        if pd.isna(vol_20): vol_20 = 0
-
-        mult = 1.0 + vol_20
-        if t in TIER_1_ASSETS: mult *= 1.2
-        
-        final_score = mom_20 * mult
-        if 'TW' in sector: final_score *= 0.9
-
-        candidates.append({'Symbol': t, 'Price': p, 'Score': final_score, 'Sector': sector})
-
-    candidates.sort(key=lambda x: x['Score'], reverse=True)
-
-    # --- 4. 弒君換馬 ---
-    while keeps and candidates:
-        worst_holding = min(keeps, key=lambda x: x['Score'])
-        existing_targets = [s['Buy']['Symbol'] for s in swaps]
-        available_candidates = [c for c in candidates if c['Symbol'] not in existing_targets]
-        if not available_candidates: break
-            
-        best_candidate = available_candidates[0]
-        vol_hold = closes[worst_holding['Symbol']].pct_change().rolling(20).std().iloc[-1] * np.sqrt(252)
-        if pd.isna(vol_hold): vol_hold = 0
-        swap_thresh = min(1.4 + (vol_hold * 0.1), 2.0)
-
-        if best_candidate['Score'] > worst_holding['Score'] * swap_thresh:
-            swaps.append({
-                'Sell': worst_holding, 'Buy': best_candidate,
-                'Reason': f"Score {best_candidate['Score']:.2f} > {worst_holding['Score']:.2f} * {swap_thresh:.1f}"
-            })
-            keeps = [k for k in keeps if k != worst_holding]
-            sells.append({'Symbol': worst_holding['Symbol'], 'Price': worst_holding['Price'], 'Reason': "💀 弒君換馬", 'PnL': f"{worst_holding['Profit']*100:.1f}%", 'Sector': worst_holding['Sector']})
-        else: break
-
-    # --- 5. 填補空位 ---
-    buy_targets = [s['Buy'] for s in swaps]
-    open_slots = MAX_TOTAL_POSITIONS - len(keeps) - len(swaps) 
-    existing_buys = [b['Symbol'] for b in buy_targets]
-    pool_idx = 0
-    while open_slots > 0 and pool_idx < len(candidates):
-        cand = candidates[pool_idx]
-        if cand['Symbol'] not in existing_buys:
-            buy_targets.append(cand)
-            open_slots -= 1
-        pool_idx += 1
-
-    return regime_status, sells, keeps, buy_targets, swaps, live_rate
-
-def send_line_notify(msg):
-    if not LINE_ACCESS_TOKEN or not LINE_USER_ID:
-        print("⚠️ 未設定 LINE Token"); print(msg); return
-    url = 'https://api.line.me/v2/bot/message/push'
-    headers = {'Content-Type': 'application/json', 'Authorization': f'Bearer {LINE_ACCESS_TOKEN}'}
-    data = {"to": LINE_USER_ID, "messages": [{"type": "text", "text": msg}]}
-    try: requests.post(url, headers=headers, json=data)
-    except Exception as e: print(f"發送 LINE 失敗: {e}")
-
-def format_message(regime, sells, keeps, buys, swaps, live_rate):
-    msg = f"🦁 **V17.45 Elite (Fixed FX)**\n{datetime.now().strftime('%Y-%m-%d')}\n"
-    msg += f"🔒 匯率鎖定: {live_rate:.2f}\n━━━━━━━━━━━━━━\n"
-    msg += f"🌍 市場環境 (Regime)\n"
-    key_indices = {'SPY': '美股', 'BTC-USD': '幣圈', '^TWII': '台股'}
-    for k, name in key_indices.items():
-        status = "🟢" if regime.get(k, False) else "❄️"
-        msg += f"{name}: {status} "
-    msg += "\n━━━━━━━━━━━━━━\n"
-
-    if sells:
-        msg += "🔴 **【賣出指令 (Pending Sell)】**\n"
-        for s in sells:
-            msg += f"❌ 賣出: {s['Symbol']}\n   原因: {s['Reason']}\n   損益: {s['PnL']}\n"
-        msg += "--------------------\n"
-
-    if swaps:
-        msg += "💀 **【弒君換馬 (Multikill)】**\n"
-        for s in swaps:
-            msg += f"📉 賣出: {s['Sell']['Symbol']} (弱)\n🚀 買入: {s['Buy']['Symbol']} (強)\n   原因: {s['Reason']}\n"
-        msg += "--------------------\n"
-
-    if buys:
-        msg += "🟢 **【買入指令 (Pending Buy)】**\n"
-        for b in buys:
-            params = SECTOR_PARAMS.get(b['Sector'], SECTOR_PARAMS['US_STOCK'])
-            stop_price = b['Price'] * (1 - params['stop'])
-            msg += f"💰 買入: {b['Symbol']}\n   現價: {b['Price']:.2f}\n   分數: {b['Score']:.2f}\n   👮 設定: 停損 -{int(params['stop']*100)}%\n   (🛑 災難底線: {stop_price:.2f})\n"
-        msg += "--------------------\n"
-
-    if keeps:
-        msg += "🛡️ **【持倉監控】**\n"
-        for k in keeps:
-            pnl = k['Profit'] * 100
-            emoji = "😍" if pnl > 20 else "😐" if pnl > 0 else "🤢"
-            limit_pct = int(k['TrailLimit'] * 100)
-            msg += f"{emoji} {k['Symbol']} ({pnl:+.1f}%)\n   🔥 動能: {k['Score']:.2f}\n   👮 移停: {limit_pct}%\n"
+# =========================
+# 4) Data & Math
+# =========================
+def get_data():
+    start_str = (datetime.utcnow() - pd.Timedelta(days=DATA_DOWNLOAD_DAYS)).strftime('%Y-%m-%d')
+    data = yf.download(ALL_TICKERS, start=start_str, progress=False, auto_adjust=True)
+    if isinstance(data.columns, pd.MultiIndex):
+        raw_close, close = data['Close'], data['Close'].ffill()
+        open_, high, low = data['Open'].ffill(), data['High'].ffill(), data['Low'].ffill()
     else:
-        if not buys and not swaps: msg += "☕ 目前空手，好好休息\n"
+        raw_close, close = data, data.ffill()
+        open_, high, low = close.copy(), close.copy(), close.copy()
+    
+    is_trading_day = ~raw_close.isna()
+    twd_series = close['TWD=X'].ffill().bfill() if 'TWD=X' in close.columns else pd.Series(USD_TWD_RATE, index=close.index)
 
-    msg += "━━━━━━━━━━━━━━"
-    return msg
+    for col in close.columns:
+        if '.TW' in col or '.TWO' in col:
+            close[col] /= twd_series; open_[col] /= twd_series
+            high[col]  /= twd_series; low[col]   /= twd_series
+
+    cols_to_drop = [c for c in close.columns if c == 'TWD=X']
+    if cols_to_drop:
+        for df in [close, open_, high, low, is_trading_day]: df.drop(columns=cols_to_drop, inplace=True)
+    return close, open_, high, low, is_trading_day
+
+def get_sector(sym): return ASSET_MAP.get(sym, 'US_STOCK')
+
+def check_regime(date, sym, close_df, benchmarks_ma):
+    sector = get_sector(sym)
+    bench = 'BTC-USD' if 'CRYPTO' in sector else '^TWII' if 'TW_' in sector else '^HSI' if 'CN_' in sector else 'QQQ'
+    if bench not in close_df.columns: return True
+    price, ma100, ma50 = close_df.loc[date, bench], benchmarks_ma[bench].loc[date], benchmarks_ma.get(f"{bench}_50")
+    if pd.isna(price) or pd.isna(ma100): return True
+    if ma50 is not None and not pd.isna(ma50.loc[date]): return (price > ma100) and (ma50.loc[date] > ma100)
+    return price > ma100
+
+# =========================
+# 5) Main Live Engine
+# =========================
+def run_live(dry_run=False):
+    print("🚀 Vanguard Live Engine 啟動...")
+    close, open_, high, low, is_trading_day = get_data()
+    
+    state = load_state()
+    
+    # 決定今天我們要看的是哪一根 K 線 (以資料庫最後一個可用日為準)
+    today = close.index[-1]
+    
+    # 若今日資料尚未產生，跳過
+    if pd.isna(close.loc[today, 'SPY']) and pd.isna(close.loc[today, '^TWII']):
+        today = close.index[-2]
+
+    cash = state['cash']
+    positions = {sym: Position.from_dict(d) for sym, d in state['positions'].items()}
+    orders_queue = state['orders_queue']
+    cooldown_dict = {sym: pd.Timestamp(d) for sym, d in state['cooldown_dict'].items()}
+    
+    # Precalculate
+    ma20, ma50, ma60 = close.rolling(20).mean(), close.rolling(50).mean(), close.rolling(60).mean()
+    benchmarks_ma = {b: close[b].rolling(100).mean() for b in ['SPY', 'QQQ', 'BTC-USD', '^TWII'] if b in close.columns}
+    for b in benchmarks_ma.keys(): benchmarks_ma[f"{b}_50"] = close[b].rolling(50).mean()
+    mom_20, vol_20 = close.pct_change(20), close.pct_change().rolling(20).std() * np.sqrt(252)
+    scores = pd.DataFrame(index=close.index, columns=close.columns)
+    
+    for t in ASSET_MAP.keys():
+        if t not in close.columns: continue
+        trend_ok = (close[t] > ma20[t]) & (ma20[t] > ma50[t]) & (close[t] > ma60[t])
+        valid_mom = (mom_20[t] > (0.08 if 'TW' in ASSET_MAP[t] else 0.05 if '3X' in ASSET_MAP[t] else 0.0)).fillna(False)
+        mult = (1.0 + vol_20[t].fillna(0)) * (1.2 if t in TIER_1_ASSETS else 1.0)
+        scores[t] = np.where(trend_ok & valid_mom, mom_20[t] * mult * (0.9 if 'TW' in ASSET_MAP[t] else 1.0), np.nan)
+    
+    vix_series = close['^VIX'] if '^VIX' in close.columns else pd.Series(20, index=close.index)
+    curr_vix = vix_series.loc[today] if not pd.isna(vix_series.loc[today]) else 20.0
+
+    # ---------------------------------------------------------
+    # 模擬 1: 結算「今日」盤中是否觸發停損 (只更新最高價或清倉)
+    # ---------------------------------------------------------
+    cols_to_del = []
+    intraday_alerts = []
+    for sym, pos in positions.items():
+        if not is_trading_day.loc[today, sym] or pd.isna(low.loc[today, sym]): continue
+        pos.current_price = close.loc[today, sym]
+        
+        # 實盤中，我們用前一天的 VIX 當作今日的防禦參數
+        prev_vix = vix_series.iloc[-2] if len(vix_series) > 1 else 20.0
+        triggered, exec_price, reason = pos.check_intraday_exit(open_.loc[today, sym], high.loc[today, sym], low.loc[today, sym], prev_vix)
+        
+        if triggered:
+            cash += pos.units * exec_price * (1 - SLIPPAGE_RATE) # 簡化成本
+            if 'CRYPTO' in pos.sector or 'LEV' in pos.sector: cooldown_dict[sym] = today + pd.Timedelta(days=1)
+            else: cooldown_dict[sym] = today + pd.Timedelta(days=5)
+            cols_to_del.append(sym)
+            intraday_alerts.append(f"⚠️ {sym} 今日盤中觸發: {reason}")
+            
+    for sym in cols_to_del: del positions[sym]
+
+    # ---------------------------------------------------------
+    # 模擬 2: 產生「明日開盤 (T+1)」的交易指令
+    # ---------------------------------------------------------
+    new_orders = []
+    holdings_to_sell = []
+    
+    for sym, pos in positions.items():
+        days_held = (today - pos.entry_date).days
+        if curr_vix > 45.0: new_orders.append({'type': 'SELL', 'symbol': sym, 'reason': "VIX>45斷路"}); holdings_to_sell.append(sym); continue
+        if days_held > pos.get_params()['zombie'] and pos.current_price <= pos.entry_price:
+            new_orders.append({'type': 'SELL', 'symbol': sym, 'reason': "Zombie"}); holdings_to_sell.append(sym); continue
+        if not check_regime(today, sym, close, benchmarks_ma):
+            new_orders.append({'type': 'SELL', 'symbol': sym, 'reason': "Regime Fail"}); holdings_to_sell.append(sym); continue
+
+    active_holdings = [s for s in positions if s not in holdings_to_sell]
+    candidates = [s for s in scores.loc[today].dropna().sort_values(ascending=False).index 
+                  if s not in positions and check_regime(today, s, close, benchmarks_ma) and (s not in cooldown_dict or today > cooldown_dict[s])]
+    
+    vix_scaler = 0.3 if curr_vix > 40 else 0.6 if curr_vix > 30 else 0.8 if curr_vix > 20 else 1.0
+    total_eq = cash + sum(p.market_value for p in positions.values())
+    target_pos_size = total_eq * BASE_POSITION_SIZE * vix_scaler
+    
+    proj = list(active_holdings)
+    def is_allowed(cand): return True if curr_vix < 25.0 else sum(1 for x in proj if get_sector(x)==get_sector(cand)) < 2
+
+    # 弒君換馬
+    while active_holdings and candidates:
+        active_holdings.sort(key=lambda x: scores.loc[today, x] if not pd.isna(scores.loc[today, x]) else -999)
+        worst = active_holdings[0]
+        if (today - positions[worst].entry_date).days < MIN_HOLD_DAYS: active_holdings.pop(0); continue
+        
+        valid_idx = next((i for i, c in enumerate(candidates) if is_allowed(c)), -1)
+        if valid_idx == -1: break
+        best = candidates[valid_idx]
+        
+        w_score = scores.loc[today, worst] if not pd.isna(scores.loc[today, worst]) else 0
+        b_score = scores.loc[today, best]
+        v_hold = vol_20.loc[today, worst] if not pd.isna(vol_20.loc[today, worst]) else 0.0
+        if b_score > w_score * min(2.0, 1.4 + v_hold*0.1) and b_score > w_score + 0.05:
+            new_orders.append({'type': 'SELL', 'symbol': worst, 'reason': f"Swap to {best}"})
+            new_orders.append({'type': 'BUY', 'symbol': best, 'amount_usd': target_pos_size})
+            proj.remove(worst); proj.append(best); active_holdings.pop(0); candidates.pop(valid_idx)
+        else: break
+        
+    # 填補空缺
+    open_slots = MAX_TOTAL_POSITIONS - len(active_holdings) + len([o for o in new_orders if o['type']=='SELL' and o['symbol'] in active_holdings])
+    for _ in range(max(0, open_slots)):
+        if not candidates or curr_vix > PANIC_VIX_THRESHOLD: break
+        valid_idx = next((i for i, c in enumerate(candidates) if is_allowed(c)), -1)
+        if valid_idx != -1:
+            cand = candidates.pop(valid_idx)
+            proj.append(cand)
+            new_orders.append({'type': 'BUY', 'symbol': cand, 'amount_usd': target_pos_size})
+
+    # Save State
+    state['cash'] = cash
+    state['positions'] = {sym: pos.to_dict() for sym, pos in positions.items()}
+    state['orders_queue'] = new_orders
+    state['cooldown_dict'] = {sym: d.strftime('%Y-%m-%d') for sym, d in cooldown_dict.items()}
+    state['last_processed_date'] = today.strftime('%Y-%m-%d')
+
+    if not dry_run: save_state(state)
+    
+    # 格式化 LINE 推播
+    msg = f"🦁 Vanguard 實盤指示 (Dry-Run)" if dry_run else f"🦁 Vanguard 實盤指示"
+    msg += f"\n📅 決策日: {today.strftime('%Y-%m-%d')} 收盤"
+    msg += f"\n🔒 VIX: {curr_vix:.1f} | 總資產估算: ${total_eq:,.0f}\n━━━━━━━━━━━━━━\n"
+    
+    if intraday_alerts:
+        msg += "🚨 【今日盤中洗盤紀錄】(系統已自動記帳)\n" + "\n".join(intraday_alerts) + "\n--------------------\n"
+
+    sells = [o for o in new_orders if o['type'] == 'SELL']
+    buys = [o for o in new_orders if o['type'] == 'BUY']
+    
+    if sells:
+        msg += "🔴 【賣出指令】(請於明日開盤賣出)\n"
+        for s in sells: msg += f"❌ 賣出 {s['symbol']} ({s.get('reason','')})\n"
+        msg += "--------------------\n"
+    if buys:
+        msg += "🟢 【買入指令】(請於明日開盤買入)\n"
+        for b in buys:
+            params = SECTOR_PARAMS.get(get_sector(b['symbol']), SECTOR_PARAMS['DEFAULT'])
+            curr_p = close[b['symbol']].iloc[-1]
+            stop_est = curr_p * (1 - params['stop'])
+            msg += f"💰 買入 {b['symbol']}\n   資金佔比: {b['amount_usd']/total_eq*100:.0f}% 總資金\n   (買入後請立即掛硬止損: {stop_est:.2f})\n"
+        msg += "--------------------\n"
+        
+    if positions:
+        msg += "🛡️ 【持倉動態防禦線】(請更新觸價單)\n"
+        for sym, p in positions.items():
+            params = p.get_params()
+            hard = p.entry_price * (1 - params['stop'])
+            profit_ratio = (p.max_price - p.entry_price) / p.entry_price
+            trail_pct = params['stop']
+            for threshold, pct in sorted(params['trail'].items(), key=lambda x: x[0], reverse=True):
+                if profit_ratio >= threshold: trail_pct = pct; break
+            if curr_vix > 30.0: trail_pct *= 0.5
+            trail_price = p.max_price * (1 - trail_pct)
+            def_line = max(hard, trail_price)
+            msg += f"• {sym}: 跌破 {def_line:.2f} 停損/停利\n"
+            
+    if not sells and not buys: msg += "☕ 明日無換倉動作，維持防禦掛單即可"
+
+    print(msg)
+    if not dry_run and LINE_TOKEN and LINE_USER_ID:
+        try:
+            requests.post('https://api.line.me/v2/bot/message/push', 
+                          headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {LINE_TOKEN}'},
+                          json={"to": LINE_USER_ID, "messages": [{"type": "text", "text": msg}]})
+        except Exception as e: print(f"LINE 發送失敗: {e}")
 
 if __name__ == "__main__":
-    res = analyze_market()
-    if res:
-        regime, sells, keeps, buys, swaps, live_rate = res
-        current_holdings = load_portfolio()
-
-        # 1. 執行賣出
-        for s in sells:
-            if s['Symbol'] in current_holdings:
-                del current_holdings[s['Symbol']]
-
-        # 2. 執行買入
-        final_csv_buys = [{'Symbol': b['Symbol'], 'Price': b['Price']} for b in buys]
-        
-        # 3. 更新 CSV
-        update_portfolio_csv(current_holdings, final_csv_buys)
-
-        msg = format_message(regime, sells, keeps, buys, swaps, live_rate)
-        print(msg)
-        send_line_notify(msg)
-    else:
-        print("❌ 分析失敗")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dry-run", action="store_true", help="不儲存 state 且不發送 LINE")
+    args = parser.parse_args()
+    run_live(dry_run=args.dry_run)
