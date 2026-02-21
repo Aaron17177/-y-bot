@@ -1,0 +1,7 @@
+{
+    "cash": 1000.0,
+    "positions": {},
+    "orders_queue": [],
+    "cooldown_dict": {},
+    "last_processed_date": "2024-01-01"
+}
