@@ -1,5 +1,6 @@
 # =========================================================
 # V17.50 VANGUARD LIVE ENGINE (純淨先鋒實務佈署版)
+# 修正內容: 解決 Catch-up 期間指令重複堆疊問題 (CR_FIX_02)
 # 修正內容: 解決 RuntimeError 字典遍歷衝突 (CR_FIX_01)
 # 對齊內容: 恢復 TIER_1_ASSETS 包含 2X 槓桿與台股特權
 # =========================================================
@@ -208,7 +209,6 @@ def run_live(dry_run=False):
     ma20, ma50, ma60 = close.rolling(20).mean(), close.rolling(50).mean(), close.rolling(60).mean()
     benchmarks_ma = {b: close[b].rolling(100).mean() for b in ['SPY', 'QQQ', 'BTC-USD', '^TWII'] if b in close.columns}
     
-    # [FIX] 使用 list 轉換以避免 RuntimeError: dictionary changed size during iteration
     for b in list(benchmarks_ma.keys()): 
         benchmarks_ma[f"{b}_50"] = close[b].rolling(50).mean()
         
@@ -282,11 +282,19 @@ def run_live(dry_run=False):
         holdings_to_sell = []
         for sym, pos in positions.items():
             if not is_trading_day.loc[tomorrow, sym]: continue
-            if curr_vix > 45.0: orders_queue.append({'type': 'SELL', 'symbol': sym, 'reason': "VIX>45斷路"}); holdings_to_sell.append(sym); continue
+            if curr_vix > 45.0: 
+                # [FIX] 防止重複加入 SELL 指令
+                if not any(o['type'] == 'SELL' and o['symbol'] == sym for o in orders_queue):
+                    orders_queue.append({'type': 'SELL', 'symbol': sym, 'reason': "VIX>45斷路"})
+                holdings_to_sell.append(sym); continue
             if (tomorrow - pos.entry_date).days > pos.get_params()['zombie'] and pos.current_price <= pos.entry_price:
-                orders_queue.append({'type': 'SELL', 'symbol': sym, 'reason': "Zombie"}); holdings_to_sell.append(sym); continue
+                if not any(o['type'] == 'SELL' and o['symbol'] == sym for o in orders_queue):
+                    orders_queue.append({'type': 'SELL', 'symbol': sym, 'reason': "Zombie"})
+                holdings_to_sell.append(sym); continue
             if not check_regime(tomorrow, sym, close, benchmarks_ma):
-                orders_queue.append({'type': 'SELL', 'symbol': sym, 'reason': "Regime Fail"}); holdings_to_sell.append(sym); continue
+                if not any(o['type'] == 'SELL' and o['symbol'] == sym for o in orders_queue):
+                    orders_queue.append({'type': 'SELL', 'symbol': sym, 'reason': "Regime Fail"})
+                holdings_to_sell.append(sym); continue
 
         active_holdings = [s for s in positions if s not in holdings_to_sell]
         candidates = [s for s in scores.loc[tomorrow].dropna().sort_values(ascending=False).index 
@@ -311,8 +319,11 @@ def run_live(dry_run=False):
             b_score = scores.loc[tomorrow, best]
             v_hold = vol_20.loc[tomorrow, worst] if not pd.isna(vol_20.loc[tomorrow, worst]) else 0.0
             if b_score > w_score * min(2.0, 1.4 + v_hold*0.1) and b_score > w_score + 0.05:
-                orders_queue.append({'type': 'SELL', 'symbol': worst, 'reason': f"Swap to {best}"})
-                orders_queue.append({'type': 'BUY', 'symbol': best, 'amount_usd': target_pos_size})
+                # [FIX] 防止重複加入 Swap 指令
+                if not any(o['type'] == 'SELL' and o['symbol'] == worst for o in orders_queue):
+                    orders_queue.append({'type': 'SELL', 'symbol': worst, 'reason': f"Swap to {best}"})
+                if not any(o['type'] == 'BUY' and o['symbol'] == best for o in orders_queue):
+                    orders_queue.append({'type': 'BUY', 'symbol': best, 'amount_usd': target_pos_size})
                 proj.remove(worst); proj.append(best); active_holdings.pop(0); candidates.pop(valid_idx)
             else: break
             
@@ -322,10 +333,21 @@ def run_live(dry_run=False):
             valid_idx = next((i for i, c in enumerate(candidates) if is_allowed(c)), -1)
             if valid_idx != -1:
                 cand = candidates.pop(valid_idx)
+                if not any(o['type'] == 'BUY' and o['symbol'] == cand for o in orders_queue):
+                    orders_queue.append({'type': 'BUY', 'symbol': cand, 'amount_usd': target_pos_size})
                 proj.append(cand)
-                orders_queue.append({'type': 'BUY', 'symbol': cand, 'amount_usd': target_pos_size})
                 
         state['last_processed_date'] = tomorrow.strftime('%Y-%m-%d')
+
+    # 最後的執行完畢後，清空重複項
+    unique_orders = []
+    seen = set()
+    for o in orders_queue:
+        key = (o['type'], o['symbol'])
+        if key not in seen:
+            unique_orders.append(o)
+            seen.add(key)
+    orders_queue = unique_orders
 
     state['cash'] = cash
     state['positions'] = {sym: pos.to_dict() for sym, pos in positions.items()}
@@ -375,7 +397,7 @@ def run_live(dry_run=False):
             def_line = max(hard, trail_price)
             msg += f"• {sym}: 跌破 {def_line:.2f} 停損/停利\n"
             
-    if not sells and not buys: msg += "☕ 明日無換倉動作，維持防禦掛單即可"
+    if not sells and not buys: msg += "☕ 今日無換倉動作，維持防禦掛單即可"
 
     print(msg)
     if not dry_run and LINE_TOKEN and LINE_USER_ID:
