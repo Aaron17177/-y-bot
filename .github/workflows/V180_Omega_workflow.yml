@@ -1,41 +1,43 @@
-name: V181 Daily Strategy Run
+name: Vanguard Live Engine
 
 on:
   schedule:
-    # 台灣時間晚上 21:00 = UTC 13:00
-    #這時候台股已收盤(數據確認)，美股盤前剛好可以掛單
+    # 台灣時間晚上 21:00 = UTC 13:00 (每天執行，含週末以捕捉 Crypto)
+    # 這時候台股已收盤，美股盤前，符合 T+1 下單邏輯
     - cron: '0 13 * * *'
   
-  # 允許手動觸發 (方便你隨時測試)
+  # 允許手動觸發 (方便您隨時測試)
   workflow_dispatch:
 
 jobs:
-  build:
+  run-strategy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # 必須允許寫入權限，才能 Commit state.json 回倉庫
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
 
     - name: Set up Python
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v5
       with:
-        # 維持使用 3.11 以支援 yfinance
         python-version: '3.11'
 
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
+        pip install yfinance pandas numpy requests
 
-    - name: Debug - List Files
-      run: ls -R
-
-    - name: Run Strategy Script
+    - name: Run Vanguard Live Engine
       env:
         LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
         LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
-      # ⚠️ 重要檢查：
-      # 請確認你上傳到 GitHub 的 Python 檔名是否為 "V181_Omega.py"
-      # 如果你是用剛剛更新的 V17.21 版本，建議將檔案統一命名（例如改為 apex_sniper_live.py）並修改下方指令
-      run: python "V181_Omega.py"
+      # 執行主程式
+      run: python vanguard_live.py
+
+    - name: Commit state.json back to repository
+      uses: stefanzweifel/git-auto-commit-action@v5
+      with:
+        commit_message: "🤖 系統更新: 儲存 Vanguard Live 歷史最高價狀態"
+        file_pattern: state.json
