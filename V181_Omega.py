@@ -1,8 +1,10 @@
 # =========================================================
 # V17.50 VANGUARD LIVE ENGINE (純淨先鋒實務佈署版)
+# 修正內容: 增設板塊多空雷達 (Bull/Bear Regime Radar) 於 LINE 顯示 (CR_FIX_07)
+# 修正內容: 自動清創修復 (Self-Healing) 多餘買單 (CR_FIX_06)
+# 修正內容: 隔離待售標的，阻斷休市連環換倉 Bug (CR_FIX_05b)
 # 修正內容: 解決 YF API 空值導致「永久吞單」的致命漏洞 (CR_FIX_05)
 # 修正內容: 採用「最悲觀艙位計算法」嚴格限制 3 檔上限 (CR_FIX_04)
-# 修正內容: 解決 Catch-up 期間指令重複堆疊問題 (CR_FIX_02)
 # =========================================================
 
 import yfinance as yf
@@ -232,7 +234,6 @@ def run_live(dry_run=False):
         buy_orders  = [o for o in orders_queue if o['type'] == 'BUY']
         pending_orders = []
 
-        # [FIX_05] 安全執行賣單：若 YF 報價空缺，退回佇列等待，避免吞單
         for o in sell_orders:
             sym = o['symbol']
             if not is_trading_day.loc[tomorrow, sym] or pd.isna(open_.loc[tomorrow, sym]): 
@@ -244,7 +245,6 @@ def run_live(dry_run=False):
             cash += (positions[sym].units * exec_price) - comm - tax
             del positions[sym]
 
-        # [FIX_05] 安全執行買單：跳空過大則作廢，若 YF 報價空缺則退回佇列
         for o in buy_orders:
             sym, amount = o['symbol'], o['amount_usd']
             if not is_trading_day.loc[tomorrow, sym] or pd.isna(open_.loc[tomorrow, sym]):
@@ -256,7 +256,6 @@ def run_live(dry_run=False):
                 pending_orders.append(o)
                 continue
             
-            # 若資金不足 或 跳空大於 10% (追高風險) -> 直接作廢，把空位讓出給其他標的
             if cash <= 0 or (open_.loc[tomorrow, sym]/close.loc[today, sym]) > (1+GAP_UP_LIMIT): 
                 continue
             
@@ -307,7 +306,12 @@ def run_live(dry_run=False):
                     orders_queue.append({'type': 'SELL', 'symbol': sym, 'reason': "Regime Fail"})
                 holdings_to_sell.append(sym); continue
 
-        active_holdings = [s for s in positions if s not in holdings_to_sell]
+        active_holdings = [
+            s for s in positions 
+            if s not in holdings_to_sell 
+            and not any(o['type'] == 'SELL' and o['symbol'] == s for o in orders_queue)
+        ]
+        
         candidates = [s for s in scores.loc[tomorrow].dropna().sort_values(ascending=False).index 
                       if s not in positions and check_regime(tomorrow, s, close, benchmarks_ma) and (s not in cooldown_dict or tomorrow > cooldown_dict[s])]
         
@@ -353,6 +357,13 @@ def run_live(dry_run=False):
                     orders_queue.append({'type': 'BUY', 'symbol': cand, 'amount_usd': target_pos_size})
                 proj.append(cand)
                 
+        expected_total = current_holding_count - pending_sell_count + len([o for o in orders_queue if o['type'] == 'BUY'])
+        if expected_total > MAX_TOTAL_POSITIONS:
+            excess = expected_total - MAX_TOTAL_POSITIONS
+            buys_in_queue = [o for o in orders_queue if o['type'] == 'BUY']
+            buys_to_remove = buys_in_queue[-excess:]
+            orders_queue = [o for o in orders_queue if o not in buys_to_remove]
+                
         state['last_processed_date'] = tomorrow.strftime('%Y-%m-%d')
 
     unique_orders = []
@@ -377,9 +388,27 @@ def run_live(dry_run=False):
     tw_open = "🟢" if is_trading_day['^TWII'].iloc[-1] else "🛑 休市"
     us_open = "🟢" if is_trading_day['SPY'].iloc[-1] else "🛑 休市"
 
+    # [FIX_07] 判斷最新大盤多空狀態 (Bull / Bear Regime)
+    def get_bull_bear(bench):
+        if bench not in close.columns: return "❓未知"
+        p = close[bench].iloc[-1]
+        ma100 = benchmarks_ma[bench].iloc[-1] if bench in benchmarks_ma else np.nan
+        ma50 = benchmarks_ma.get(f"{bench}_50").iloc[-1] if f"{bench}_50" in benchmarks_ma else np.nan
+        if pd.isna(p) or pd.isna(ma100): return "❓未知"
+        
+        # 判斷邏輯：如果 50MA 存在，需 Price > 100MA 且 50MA > 100MA 才算真多頭
+        if not pd.isna(ma50):
+            return "🐂 牛" if (p > ma100) and (ma50 > ma100) else "🐻 熊"
+        return "🐂 牛" if p > ma100 else "🐻 熊"
+
+    us_status = get_bull_bear('QQQ')
+    tw_status = get_bull_bear('^TWII')
+    btc_status = get_bull_bear('BTC-USD')
+
     msg = f"🦁 Vanguard 實盤指示 (Dry-Run)" if dry_run else f"🦁 Vanguard 實盤指示"
     msg += f"\n📅 決策對象：下一個交易日開盤"
     msg += f"\n🌍 市場狀態：台股 {tw_open} | 美股 {us_open}"
+    msg += f"\n🧭 板塊趨勢：美股 {us_status} | 台股 {tw_status} | 加密 {btc_status}"
     msg += f"\n🔒 VIX: {latest_vix:.1f} | 總資產估算: ${total_eq:,.0f}\n━━━━━━━━━━━━━━\n"
     
     if intraday_alerts:
