@@ -1,8 +1,8 @@
 # =========================================================
 # V17.50 VANGUARD LIVE ENGINE (純淨先鋒實務佈署版)
-# 修正內容: 解決 Slot 計算錯誤導致超買問題 (CR_FIX_03)
+# 修正內容: 解決 YF API 空值導致「永久吞單」的致命漏洞 (CR_FIX_05)
+# 修正內容: 採用「最悲觀艙位計算法」嚴格限制 3 檔上限 (CR_FIX_04)
 # 修正內容: 解決 Catch-up 期間指令重複堆疊問題 (CR_FIX_02)
-# 修正內容: 解決 RuntimeError 字典遍歷衝突 (CR_FIX_01)
 # =========================================================
 
 import yfinance as yf
@@ -138,8 +138,10 @@ class Position:
 
 def load_state():
     if os.path.exists(STATE_FILE):
-        with open(STATE_FILE, 'r') as f:
-            return json.load(f)
+        try:
+            with open(STATE_FILE, 'r') as f:
+                return json.load(f)
+        except: pass
     return {
         "cash": INITIAL_CAPITAL_USD, "positions": {}, "orders_queue": [], "cooldown_dict": {},
         "last_processed_date": (datetime.utcnow() - pd.Timedelta(days=5)).strftime('%Y-%m-%d')
@@ -207,9 +209,7 @@ def run_live(dry_run=False):
     
     ma20, ma50, ma60 = close.rolling(20).mean(), close.rolling(50).mean(), close.rolling(60).mean()
     benchmarks_ma = {b: close[b].rolling(100).mean() for b in ['SPY', 'QQQ', 'BTC-USD', '^TWII'] if b in close.columns}
-    
-    for b in list(benchmarks_ma.keys()): 
-        benchmarks_ma[f"{b}_50"] = close[b].rolling(50).mean()
+    for b in list(benchmarks_ma.keys()): benchmarks_ma[f"{b}_50"] = close[b].rolling(50).mean()
         
     mom_20, vol_20 = close.pct_change(20), close.pct_change().rolling(20).std() * np.sqrt(252)
     scores = pd.DataFrame(index=close.index, columns=close.columns)
@@ -232,20 +232,33 @@ def run_live(dry_run=False):
         buy_orders  = [o for o in orders_queue if o['type'] == 'BUY']
         pending_orders = []
 
+        # [FIX_05] 安全執行賣單：若 YF 報價空缺，退回佇列等待，避免吞單
         for o in sell_orders:
             sym = o['symbol']
-            if not is_trading_day.loc[tomorrow, sym]: pending_orders.append(o); continue
-            if sym not in positions or pd.isna(open_.loc[tomorrow, sym]): continue
+            if not is_trading_day.loc[tomorrow, sym] or pd.isna(open_.loc[tomorrow, sym]): 
+                pending_orders.append(o)
+                continue
+            if sym not in positions: continue
             exec_price = open_.loc[tomorrow, sym] * (1 - SLIPPAGE_RATE)
             comm, tax = get_costs(positions[sym].sector, sym, positions[sym].units * exec_price, 'SELL')
             cash += (positions[sym].units * exec_price) - comm - tax
             del positions[sym]
 
+        # [FIX_05] 安全執行買單：跳空過大則作廢，若 YF 報價空缺則退回佇列
         for o in buy_orders:
             sym, amount = o['symbol'], o['amount_usd']
-            if not is_trading_day.loc[tomorrow, sym] or (cash < amount * 0.90 and any(x['type']=='SELL' for x in pending_orders)):
-                pending_orders.append(o); continue
-            if cash <= 0 or pd.isna(open_.loc[tomorrow, sym]) or (open_.loc[tomorrow, sym]/close.loc[today, sym]) > (1+GAP_UP_LIMIT): continue
+            if not is_trading_day.loc[tomorrow, sym] or pd.isna(open_.loc[tomorrow, sym]):
+                pending_orders.append(o)
+                continue
+                
+            has_pending_sells = any(x['type']=='SELL' for x in pending_orders)
+            if cash < amount * 0.90 and has_pending_sells:
+                pending_orders.append(o)
+                continue
+            
+            # 若資金不足 或 跳空大於 10% (追高風險) -> 直接作廢，把空位讓出給其他標的
+            if cash <= 0 or (open_.loc[tomorrow, sym]/close.loc[today, sym]) > (1+GAP_UP_LIMIT): 
+                continue
             
             exec_price = open_.loc[tomorrow, sym] * (1 + SLIPPAGE_RATE)
             temp_comm, _ = get_costs(get_sector(sym), sym, 1.0, 'BUY')
@@ -299,7 +312,8 @@ def run_live(dry_run=False):
                       if s not in positions and check_regime(tomorrow, s, close, benchmarks_ma) and (s not in cooldown_dict or tomorrow > cooldown_dict[s])]
         
         vix_scaler = 0.3 if curr_vix > 40 else 0.6 if curr_vix > 30 else 0.8 if curr_vix > 20 else 1.0
-        target_pos_size = (cash + sum([p.market_value for p in positions.values()])) * BASE_POSITION_SIZE * vix_scaler
+        total_eq = cash + sum(p.market_value for p in positions.values())
+        target_pos_size = total_eq * BASE_POSITION_SIZE * vix_scaler
         proj = list(active_holdings)
         
         def is_allowed(cand): return True if curr_vix < 25.0 else sum(1 for x in proj if get_sector(x)==get_sector(cand)) < 2
@@ -324,11 +338,11 @@ def run_live(dry_run=False):
                 proj.remove(worst); proj.append(best); active_holdings.pop(0); candidates.pop(valid_idx)
             else: break
             
-        # [FIX_03] 修正 Slot 計算：必須扣除已經在隊列中準備買入的標的數量
-        pending_sells = len([o for o in orders_queue if o['type']=='SELL' and o['symbol'] in active_holdings])
-        pending_buys = len([o for o in orders_queue if o['type']=='BUY']) # 新增這行
+        current_holding_count = len(positions)
+        pending_sell_count = len([o for o in orders_queue if o['type'] == 'SELL'])
+        pending_buy_count = len([o for o in orders_queue if o['type'] == 'BUY'])
         
-        open_slots = MAX_TOTAL_POSITIONS - len(active_holdings) + pending_sells - pending_buys
+        open_slots = MAX_TOTAL_POSITIONS - (current_holding_count - pending_sell_count + pending_buy_count)
         
         for _ in range(max(0, open_slots)):
             if not candidates or curr_vix > PANIC_VIX_THRESHOLD: break
@@ -357,26 +371,29 @@ def run_live(dry_run=False):
 
     if not dry_run: save_state(state)
     
-    target_date = (pd.Timestamp(state['last_processed_date']) + pd.Timedelta(days=1)).strftime('%Y-%m-%d')
     total_eq = cash + sum(p.market_value for p in positions.values())
     latest_vix = vix_series.iloc[-1]
     
+    tw_open = "🟢" if is_trading_day['^TWII'].iloc[-1] else "🛑 休市"
+    us_open = "🟢" if is_trading_day['SPY'].iloc[-1] else "🛑 休市"
+
     msg = f"🦁 Vanguard 實盤指示 (Dry-Run)" if dry_run else f"🦁 Vanguard 實盤指示"
-    msg += f"\n📅 決策對象日: {target_date} 開盤"
+    msg += f"\n📅 決策對象：下一個交易日開盤"
+    msg += f"\n🌍 市場狀態：台股 {tw_open} | 美股 {us_open}"
     msg += f"\n🔒 VIX: {latest_vix:.1f} | 總資產估算: ${total_eq:,.0f}\n━━━━━━━━━━━━━━\n"
     
     if intraday_alerts:
-        msg += "🚨 【昨日盤中防禦觸發】(已記錄)\n" + "\n".join(intraday_alerts) + "\n--------------------\n"
+        msg += "🚨 【昨日盤中防禦觸發】(系統已記帳)\n" + "\n".join(intraday_alerts) + "\n--------------------\n"
 
     sells = [o for o in orders_queue if o['type'] == 'SELL']
     buys = [o for o in orders_queue if o['type'] == 'BUY']
     
     if sells:
-        msg += "🔴 【賣出指令】(請於明日開盤賣出)\n"
-        for s in sells: msg += f"❌ 賣出 {s['symbol']} (原因: {s.get('reason','')})\n"
+        msg += "🔴 【賣出指令】(請於開盤賣出)\n"
+        for s in sells: msg += f"❌ 賣出 {s['symbol']} ({s.get('reason','')})\n"
         msg += "--------------------\n"
     if buys:
-        msg += "🟢 【買入指令】(請於明日開盤買入)\n"
+        msg += "🟢 【買入指令】(請於開盤買入)\n"
         for b in buys:
             params = SECTOR_PARAMS.get(get_sector(b['symbol']), SECTOR_PARAMS['DEFAULT'])
             curr_p = close[b['symbol']].iloc[-1] if b['symbol'] in close.columns and not pd.isna(close[b['symbol']].iloc[-1]) else 0
