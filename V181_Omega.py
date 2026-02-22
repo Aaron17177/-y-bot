@@ -434,7 +434,7 @@ def run_live(dry_run=False):
             params = SECTOR_PARAMS.get(get_sector(b['symbol']), SECTOR_PARAMS['DEFAULT'])
             curr_p = close[b['symbol']].iloc[-1] if b['symbol'] in close.columns and not pd.isna(close[b['symbol']].iloc[-1]) else 0
             stop_est = curr_p * (1 - params['stop'])
-            msg += f"💰 買入 {b['symbol']}\n   目標佔比: {b['amount_usd']/total_eq*100:.0f}% 總資金\n   (買入後請立即掛硬止損: {stop_est:.2f})\n"
+            msg += f"💰 買入 {b['symbol']}\n   目標佔比: {b['amount_usd']/total_eq*100:.0f}% 總資金\n   (買入後請立即掛硬止損: {stop_est:.2f} / -{params['stop']*100:g}%)\n"
         msg += "--------------------\n"
         
     if positions:
@@ -449,7 +449,9 @@ def run_live(dry_run=False):
             if latest_vix > 30.0: trail_pct *= 0.5
             trail_price = p.max_price * (1 - trail_pct)
             def_line = max(hard, trail_price)
-            msg += f"• {sym}: 跌破 {def_line:.2f} 停損/停利\n"
+            
+            pct_str = f"硬止損 -{params['stop']*100:g}%" if def_line == hard else f"高點回撤 -{trail_pct*100:g}%"
+            msg += f"• {sym}: 跌破 {def_line:.2f} 停損/停利 ({pct_str})\n"
             
     if not sells and not buys: msg += "☕ 今日無換倉動作，維持防禦掛單即可"
 
