@@ -61,24 +61,36 @@ ASSET_MAP = {
     'DOGE-USD': 'CRYPTO_MEME', 'SHIB-USD': 'CRYPTO_MEME', 'BONK-USD': 'CRYPTO_MEME',
     'PEPE24478-USD': 'CRYPTO_MEME', 'WIF-USD': 'CRYPTO_MEME', 'FLOKI-USD': 'CRYPTO_MEME',
     'SUI20947-USD': 'CRYPTO_SPOT', 'TAO22974-USD': 'CRYPTO_MEME', 'ENA-USD': 'CRYPTO_MEME',
-    'GGLL': 'LEV_2X', 'FNGU': 'LEV_3X', 'NVDL': 'LEV_2X', 'ASTX': 'LEV_2X',
+    'GGLL': 'LEV_2X', 'FNGU': 'LEV_3X',
+    'NVDL': 'LEV_2X', 'ASTX': 'LEV_2X',
     'HOOX': 'LEV_2X', 'IONX': 'LEV_2X', 'OKLL': 'LEV_2X', 'RKLX': 'LEV_2X',
-    'LUNR': 'US_GROWTH', 'QUBT': 'US_GROWTH', 'PLTR': 'US_GROWTH', 'SMCI': 'US_GROWTH', 
-    'CRWD': 'US_GROWTH', 'PANW': 'US_GROWTH', 'APP': 'US_GROWTH', 'SHOP': 'US_GROWTH',
+    'LUNR': 'US_GROWTH', 'QUBT': 'US_GROWTH',
+    'PLTR': 'US_GROWTH', 'SMCI': 'US_GROWTH', 'CRWD': 'US_GROWTH', 'PANW': 'US_GROWTH',
+    'APP': 'US_GROWTH', 'SHOP': 'US_GROWTH',
     'IONQ': 'US_GROWTH', 'RGTI': 'US_GROWTH', 'RKLB': 'US_GROWTH', 'VRT': 'US_GROWTH',
     'VST': 'US_GROWTH', 'ASTS': 'US_GROWTH', 'OKLO': 'US_GROWTH', 'VKTX': 'US_GROWTH',
-    'HOOD': 'US_GROWTH', 'SERV': 'US_GROWTH', 'GLD': 'US_STOCK',
+    'HOOD': 'US_GROWTH', 'SERV': 'US_GROWTH',
+    'GLD': 'US_STOCK',
+    
+    # === A/B Test 倖存者保留 ===
+    'UGL': 'LEV_2X', 'AGQ': 'LEV_2X',                                         
+    'ALAB': 'US_GROWTH', 'ARM': 'US_GROWTH', 'CEG': 'US_GROWTH', 'URA': 'US_STOCK', 
+    'PENDLE-USD': 'CRYPTO_SPOT', 
+    
+    # === Phase 3 修正版 (剔除 APT, 修正 RDDT) ===
+    'SMR': 'US_GROWTH', 'RDDT': 'US_GROWTH', 'SOUN': 'US_GROWTH', 
+    'POPCAT28782-USD': 'CRYPTO_MEME',
+
     '2317.TW': 'TW_STOCK', '2603.TW': 'TW_STOCK', '2609.TW': 'TW_STOCK', '8996.TW': 'TW_STOCK',
     '6442.TW': 'TW_STOCK', '8299.TWO': 'TW_STOCK', '3529.TWO': 'TW_STOCK', '6739.TWO': 'TW_STOCK',
     '2359.TW': 'TW_STOCK', '8054.TWO': 'TW_STOCK', '3035.TW': 'TW_STOCK',
     '6531.TW': 'TW_STOCK', '3324.TWO': 'TW_STOCK',
 }
 
+# 目前 TIER_1_ASSETS 保持不變
 TIER_1_ASSETS = [
-    'RGTI', 'QUBT', 'ASTS', 'IONQ', 'LUNR', 'RKLB', 'PLTR', 'VST', 'RGTX', 'ASTX',
-    'HOOX', 'IONX', 'OKLL', 'RKLX', 'PLTU',
-    'DOGE-USD', 'BONK-USD', 'WIF-USD', 'KAS-USD', 'RENDER-USD',
-    '8299.TWO', '6442.TW', '2359.TW'
+    'RGTI', 'QUBT', 'ASTS', 'IONQ', 'LUNR', 'RKLB', 'PLTR', 'VST',
+    'DOGE-USD', 'BONK-USD', 'WIF-USD', 'KAS-USD', 'RENDER-USD'
 ]
 
 ALL_TICKERS = list(set(list(ASSET_MAP.keys()) + ['SPY', 'QQQ', 'BTC-USD', '^TWII', '^HSI', '^VIX', 'TWD=X']))
