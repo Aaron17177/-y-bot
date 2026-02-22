@@ -1,10 +1,8 @@
 # =========================================================
 # V17.50 VANGUARD LIVE ENGINE (純淨先鋒實務佈署版)
-# 修正內容: 增設板塊多空雷達 (Bull/Bear Regime Radar) 於 LINE 顯示 (CR_FIX_07)
-# 修正內容: 自動清創修復 (Self-Healing) 多餘買單 (CR_FIX_06)
-# 修正內容: 隔離待售標的，阻斷休市連環換倉 Bug (CR_FIX_05b)
+# 修正內容: 導入全域狀態消毒機 (Global Sanitizer)，徹底根除休市繞過清創的 Bug (CR_FIX_08)
+# 修正內容: 增設板塊多空雷達 (Bull/Bear Regime Radar) (CR_FIX_07)
 # 修正內容: 解決 YF API 空值導致「永久吞單」的致命漏洞 (CR_FIX_05)
-# 修正內容: 採用「最悲觀艙位計算法」嚴格限制 3 檔上限 (CR_FIX_04)
 # =========================================================
 
 import yfinance as yf
@@ -192,6 +190,29 @@ def check_regime(date, sym, close_df, benchmarks_ma):
     if ma50 is not None and not pd.isna(ma50.loc[date]): return (price > ma100) and (ma50.loc[date] > ma100)
     return price > ma100
 
+# [FIX_08] 絕對淨化機制：清洗舊有髒資料，保證算術完美
+def sanitize_queue(positions, orders_queue):
+    unique_orders = []
+    seen = set()
+    for o in orders_queue:
+        key = (o['type'], o['symbol'])
+        if key not in seen:
+            unique_orders.append(o)
+            seen.add(key)
+    queue = unique_orders
+    
+    current_holding = len(positions)
+    pending_sells = len([o for o in queue if o['type'] == 'SELL'])
+    buys = [o for o in queue if o['type'] == 'BUY']
+    
+    expected_total = current_holding - pending_sells + len(buys)
+    if expected_total > MAX_TOTAL_POSITIONS:
+        excess = expected_total - MAX_TOTAL_POSITIONS
+        buys_to_remove = buys[-excess:]
+        queue = [o for o in queue if o not in buys_to_remove]
+        
+    return queue
+
 def run_live(dry_run=False):
     print("🚀 Vanguard Live Engine 啟動...")
     close, open_, high, low, is_trading_day = get_data()
@@ -201,13 +222,16 @@ def run_live(dry_run=False):
     if not completed_dates: return
     
     state = load_state()
-    last_processed = pd.Timestamp(state['last_processed_date'])
-    dates_to_process = [d for d in completed_dates if d > last_processed]
-    
     cash = state['cash']
     positions = {sym: Position.from_dict(d) for sym, d in state['positions'].items()}
     orders_queue = state['orders_queue']
     cooldown_dict = {sym: pd.Timestamp(d) for sym, d in state['cooldown_dict'].items()}
+    
+    # 【最關鍵防線】：一讀檔立刻消毒，即使今天休市不運算，也不會印出毒清單
+    orders_queue = sanitize_queue(positions, orders_queue)
+
+    last_processed = pd.Timestamp(state['last_processed_date'])
+    dates_to_process = [d for d in completed_dates if d > last_processed]
     
     ma20, ma50, ma60 = close.rolling(20).mean(), close.rolling(50).mean(), close.rolling(60).mean()
     benchmarks_ma = {b: close[b].rolling(100).mean() for b in ['SPY', 'QQQ', 'BTC-USD', '^TWII'] if b in close.columns}
@@ -357,23 +381,9 @@ def run_live(dry_run=False):
                     orders_queue.append({'type': 'BUY', 'symbol': cand, 'amount_usd': target_pos_size})
                 proj.append(cand)
                 
-        expected_total = current_holding_count - pending_sell_count + len([o for o in orders_queue if o['type'] == 'BUY'])
-        if expected_total > MAX_TOTAL_POSITIONS:
-            excess = expected_total - MAX_TOTAL_POSITIONS
-            buys_in_queue = [o for o in orders_queue if o['type'] == 'BUY']
-            buys_to_remove = buys_in_queue[-excess:]
-            orders_queue = [o for o in orders_queue if o not in buys_to_remove]
-                
+        # 每日結算後，再次確保對列完美
+        orders_queue = sanitize_queue(positions, orders_queue)
         state['last_processed_date'] = tomorrow.strftime('%Y-%m-%d')
-
-    unique_orders = []
-    seen = set()
-    for o in orders_queue:
-        key = (o['type'], o['symbol'])
-        if key not in seen:
-            unique_orders.append(o)
-            seen.add(key)
-    orders_queue = unique_orders
 
     state['cash'] = cash
     state['positions'] = {sym: pos.to_dict() for sym, pos in positions.items()}
@@ -388,15 +398,12 @@ def run_live(dry_run=False):
     tw_open = "🟢" if is_trading_day['^TWII'].iloc[-1] else "🛑 休市"
     us_open = "🟢" if is_trading_day['SPY'].iloc[-1] else "🛑 休市"
 
-    # [FIX_07] 判斷最新大盤多空狀態 (Bull / Bear Regime)
     def get_bull_bear(bench):
         if bench not in close.columns: return "❓未知"
         p = close[bench].iloc[-1]
         ma100 = benchmarks_ma[bench].iloc[-1] if bench in benchmarks_ma else np.nan
         ma50 = benchmarks_ma.get(f"{bench}_50").iloc[-1] if f"{bench}_50" in benchmarks_ma else np.nan
         if pd.isna(p) or pd.isna(ma100): return "❓未知"
-        
-        # 判斷邏輯：如果 50MA 存在，需 Price > 100MA 且 50MA > 100MA 才算真多頭
         if not pd.isna(ma50):
             return "🐂 牛" if (p > ma100) and (ma50 > ma100) else "🐻 熊"
         return "🐂 牛" if p > ma100 else "🐻 熊"
