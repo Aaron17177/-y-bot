@@ -39,11 +39,6 @@
             "type": "BUY",
             "symbol": "3529.TWO",
             "amount_usd": 587.5550893652486
-        },
-        {
-            "type": "BUY",
-            "symbol": "3324.TWO",
-            "amount_usd": 470.0565199325518
         }
     ],
     "cooldown_dict": {
