@@ -1,5 +1,6 @@
 # =========================================================
 # V17.50 VANGUARD LIVE ENGINE (純淨先鋒實務佈署版)
+# 修正內容: 增加台股「台幣雙幣別」停損停利防禦價顯示 (CR_FIX_09)
 # 修正內容: 導入全域狀態消毒機 (Global Sanitizer)，徹底根除休市繞過清創的 Bug (CR_FIX_08)
 # 修正內容: 增設板塊多空雷達 (Bull/Bear Regime Radar) (CR_FIX_07)
 # 修正內容: 解決 YF API 空值導致「永久吞單」的致命漏洞 (CR_FIX_05)
@@ -77,9 +78,6 @@ ASSET_MAP = {
     'ALAB': 'US_GROWTH', 'ARM': 'US_GROWTH', 'CEG': 'US_GROWTH', 'URA': 'US_STOCK', 
     'PENDLE-USD': 'CRYPTO_SPOT', 
     
-    # === Phase 3 修正版 (剔除 APT, 修正 RDDT) ===
-    'SMR': 'US_GROWTH', 'RDDT': 'US_GROWTH', 'SOUN': 'US_GROWTH', 
-    'POPCAT28782-USD': 'CRYPTO_MEME',
 
     '2317.TW': 'TW_STOCK', '2603.TW': 'TW_STOCK', '2609.TW': 'TW_STOCK', '8996.TW': 'TW_STOCK',
     '6442.TW': 'TW_STOCK', '8299.TWO': 'TW_STOCK', '3529.TWO': 'TW_STOCK', '6739.TWO': 'TW_STOCK',
@@ -184,7 +182,9 @@ def get_data():
     cols_to_drop = [c for c in close.columns if c == 'TWD=X']
     if cols_to_drop:
         for df in [close, open_, high, low, is_trading_day]: df.drop(columns=cols_to_drop, inplace=True)
-    return close, open_, high, low, is_trading_day
+        
+    # [FIX_09] 回傳 twd_series 供顯示換算使用
+    return close, open_, high, low, is_trading_day, twd_series
 
 def get_sector(sym): return ASSET_MAP.get(sym, 'US_STOCK')
 
@@ -227,7 +227,10 @@ def sanitize_queue(positions, orders_queue):
 
 def run_live(dry_run=False):
     print("🚀 Vanguard Live Engine 啟動...")
-    close, open_, high, low, is_trading_day = get_data()
+    close, open_, high, low, is_trading_day, twd_series = get_data()
+    
+    # 抓取最新匯率供介面顯示
+    latest_twd_rate = twd_series.iloc[-1] if not twd_series.empty else USD_TWD_RATE
     
     today_utc = datetime.utcnow().date()
     completed_dates = [d for d in close.index if d.date() < today_utc]
@@ -446,7 +449,13 @@ def run_live(dry_run=False):
             params = SECTOR_PARAMS.get(get_sector(b['symbol']), SECTOR_PARAMS['DEFAULT'])
             curr_p = close[b['symbol']].iloc[-1] if b['symbol'] in close.columns and not pd.isna(close[b['symbol']].iloc[-1]) else 0
             stop_est = curr_p * (1 - params['stop'])
-            msg += f"💰 買入 {b['symbol']}\n   目標佔比: {b['amount_usd']/total_eq*100:.0f}% 總資金\n   (買入後請立即掛硬止損: {stop_est:.2f} / -{params['stop']*100:g}%)\n"
+            
+            # --- [FIX_09] 加入台股雙幣別轉換顯示 ---
+            if 'TW' in get_sector(b['symbol']):
+                stop_est_twd = stop_est * latest_twd_rate
+                msg += f"💰 買入 {b['symbol']}\n   目標佔比: {b['amount_usd']/total_eq*100:.0f}% 總資金\n   (買入後請立即掛硬止損: ${stop_est:.2f} / 約 NT${stop_est_twd:.2f} / -{params['stop']*100:g}%)\n"
+            else:
+                msg += f"💰 買入 {b['symbol']}\n   目標佔比: {b['amount_usd']/total_eq*100:.0f}% 總資金\n   (買入後請立即掛硬止損: ${stop_est:.2f} / -{params['stop']*100:g}%)\n"
         msg += "--------------------\n"
         
     if positions:
@@ -463,7 +472,13 @@ def run_live(dry_run=False):
             def_line = max(hard, trail_price)
             
             pct_str = f"硬止損 -{params['stop']*100:g}%" if def_line == hard else f"高點回撤 -{trail_pct*100:g}%"
-            msg += f"• {sym}: 跌破 {def_line:.2f} 停損/停利 ({pct_str})\n"
+            
+            # --- [FIX_09] 加入台股雙幣別轉換顯示 ---
+            if 'TW' in p.sector:
+                def_line_twd = def_line * latest_twd_rate
+                msg += f"• {sym}: 跌破 ${def_line:.2f} (約 NT${def_line_twd:.2f}) 停損/停利 ({pct_str})\n"
+            else:
+                msg += f"• {sym}: 跌破 ${def_line:.2f} 停損/停利 ({pct_str})\n"
             
     if not sells and not buys: msg += "☕ 今日無換倉動作，維持防禦掛單即可"
 
