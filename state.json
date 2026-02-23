@@ -1,32 +1,23 @@
 {
-    "cash": 434.92421536885877,
+    "cash": 1556.11,
     "positions": {
-        "6442.TW": {
-            "symbol": "6442.TW",
-            "entry_date": "2026-01-30",
-            "entry_price": 56.0718965090783,
-            "units": 2.0861696903374027,
+        "6442": {
+            "symbol": "6442",
+            "entry_date": "2026-02-23",
+            "entry_price": 57.75451950523311,
+            "units": 1,
             "sector": "TW_STOCK",
-            "max_price": 63.53502398371779,
-            "current_price": 61.94664838412485
+            "max_price": 57.75451950523311,
+            "current_price": 57.75451950523311
         },
-        "8996.TW": {
-            "symbol": "8996.TW",
-            "entry_date": "2026-02-02",
-            "entry_price": 22.74749060680778,
-            "units": 23.64905938225331,
+        "8996": {
+            "symbol": "8996",
+            "entry_date": "2026-02-23",
+            "entry_price": 27.81477957500793,
+            "units": 1,
             "sector": "TW_STOCK",
-            "max_price": 30.353726241086235,
-            "current_price": 28.78136586462416
-        },
-        "6739.TWO": {
-            "symbol": "6739.TWO",
-            "entry_date": "2026-02-03",
-            "entry_price": 28.81252484495329,
-            "units": 19.152180011370884,
-            "sector": "TW_STOCK",
-            "max_price": 28.913357407918035,
-            "current_price": 27.06592021706378
+            "max_price": 27.81477957500793,
+            "current_price": 27.81477957500793
         }
     },
     "orders_queue": [
@@ -48,5 +39,5 @@
         "ASTX": "2025-12-27",
         "8299.TWO": "2026-02-08"
     },
-    "last_processed_date": "2026-02-22"
+    "last_processed_date": "2026-02-23"
 }
