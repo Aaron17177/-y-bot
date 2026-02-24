@@ -78,7 +78,6 @@ ASSET_MAP = {
     'ALAB': 'US_GROWTH', 'ARM': 'US_GROWTH', 'CEG': 'US_GROWTH', 'URA': 'US_STOCK', 
     'PENDLE-USD': 'CRYPTO_SPOT', 
     
-
     '2317.TW': 'TW_STOCK', '2603.TW': 'TW_STOCK', '2609.TW': 'TW_STOCK', '8996.TW': 'TW_STOCK',
     '6442.TW': 'TW_STOCK', '8299.TWO': 'TW_STOCK', '3529.TWO': 'TW_STOCK', '6739.TWO': 'TW_STOCK',
     '2359.TW': 'TW_STOCK', '8054.TWO': 'TW_STOCK', '3035.TW': 'TW_STOCK',
@@ -161,8 +160,10 @@ def save_state(state):
     with open(STATE_FILE, 'w') as f:
         json.dump(state, f, indent=4)
 
-def get_data():
-    start_str = (datetime.utcnow() - pd.Timedelta(days=DATA_DOWNLOAD_DAYS)).strftime('%Y-%m-%d')
+def get_data(start_date=None):
+    if start_date is None:
+        start_date = datetime.utcnow() - pd.Timedelta(days=DATA_DOWNLOAD_DAYS)
+    start_str = start_date.strftime('%Y-%m-%d')
     data = yf.download(ALL_TICKERS, start=start_str, progress=False, auto_adjust=True)
     if isinstance(data.columns, pd.MultiIndex):
         raw_close, close = data['Close'], data['Close'].ffill()
@@ -227,7 +228,18 @@ def sanitize_queue(positions, orders_queue):
 
 def run_live(dry_run=False):
     print("🚀 Vanguard Live Engine 啟動...")
-    close, open_, high, low, is_trading_day, twd_series = get_data()
+    
+    # --- [FIX_11] 先讀檔，根據您的買入日期，動態決定要抓多久的資料 ---
+    state = load_state()
+    positions = {sym: Position.from_dict(d) for sym, d in state['positions'].items()}
+    
+    earliest_entry = pd.Timestamp(datetime.utcnow().date() - pd.Timedelta(days=DATA_DOWNLOAD_DAYS))
+    if positions:
+        min_entry = min([pos.entry_date for pos in positions.values()])
+        if min_entry < earliest_entry:
+            earliest_entry = min_entry - pd.Timedelta(days=5) # 提早5天策安全
+            
+    close, open_, high, low, is_trading_day, twd_series = get_data(start_date=earliest_entry)
     
     # 抓取最新匯率供介面顯示
     latest_twd_rate = twd_series.iloc[-1] if not twd_series.empty else USD_TWD_RATE
@@ -236,13 +248,26 @@ def run_live(dry_run=False):
     completed_dates = [d for d in close.index if d.date() < today_utc]
     if not completed_dates: return
     
-    state = load_state()
     cash = state['cash']
-    positions = {sym: Position.from_dict(d) for sym, d in state['positions'].items()}
+    
+    # --- [FIX_10] 歷史最高價全自動掃描與修復機制 ---
+    naive_high_idx = high.index.tz_localize(None) # 消除 yfinance 時區
+    for sym, pos in positions.items():
+        if sym in high.columns:
+            try:
+                # 程式在這裡自動執行：「從您告訴我的買入日期，一路掃描到今天的最高價」
+                mask = naive_high_idx >= pos.entry_date
+                hist_highs = high.loc[mask, sym]
+                if not hist_highs.empty:
+                    real_max = hist_highs.max()
+                    if pd.notna(real_max) and real_max > pos.max_price:
+                        pos.max_price = real_max
+            except Exception as e:
+                print(f"⚠️ {sym} 最高價修復失敗: {e}")
+                
     orders_queue = state['orders_queue']
     cooldown_dict = {sym: pd.Timestamp(d) for sym, d in state['cooldown_dict'].items()}
     
-    # 【最關鍵防線】：一讀檔立刻消毒，即使今天休市不運算，也不會印出毒清單
     orders_queue = sanitize_queue(positions, orders_queue)
 
     last_processed = pd.Timestamp(state['last_processed_date'])
