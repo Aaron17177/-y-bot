@@ -5,7 +5,7 @@
             "symbol": "3529",
             "entry_date": "2026-02-24",
             "entry_price": 74.27662957074722,
-            "units": 1,
+            "units": 1.0,
             "sector": "TW_STOCK",
             "max_price": 74.27662957074722,
             "current_price": 74.27662957074722
@@ -14,7 +14,7 @@
             "symbol": "6442",
             "entry_date": "2026-02-23",
             "entry_price": 57.75451950523311,
-            "units": 1,
+            "units": 1.0,
             "sector": "TW_STOCK",
             "max_price": 57.75451950523311,
             "current_price": 57.75451950523311
@@ -23,7 +23,7 @@
             "symbol": "8996",
             "entry_date": "2026-02-23",
             "entry_price": 27.81477957500793,
-            "units": 1,
+            "units": 1.0,
             "sector": "TW_STOCK",
             "max_price": 27.81477957500793,
             "current_price": 27.81477957500793
