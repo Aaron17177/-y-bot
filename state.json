@@ -1,35 +1,46 @@
 {
-    "cash": 1395.3563675554847,
+    "cash": 1395.5063122465933,
     "positions": {
         "3529.TWO": {
             "symbol": "3529.TWO",
             "entry_date": "2026-02-24",
             "entry_price": 74.5968385757624,
-            "units": 1,
+            "units": 1.0,
             "sector": "TW_STOCK",
-            "max_price": 74.5968385757624,
-            "current_price": 74.5968385757624
+            "max_price": 83.20266102260595,
+            "current_price": 79.19788637971891
         },
         "6442.TW": {
             "symbol": "6442.TW",
             "entry_date": "2026-02-04",
             "entry_price": 58.15104582468465,
-            "units": 1,
+            "units": 1.0,
             "sector": "TW_STOCK",
-            "max_price": 58.15104582468465,
-            "current_price": 58.15104582468465
+            "max_price": 72.3223130427267,
+            "current_price": 66.29038377054943
         },
         "8996.TW": {
             "symbol": "8996.TW",
             "entry_date": "2026-02-23",
             "entry_price": 28.005748044068337,
-            "units": 1,
+            "units": 1.0,
             "sector": "TW_STOCK",
-            "max_price": 28.005748044068337,
-            "current_price": 28.005748044068337
+            "max_price": 30.507591095819595,
+            "current_price": 29.03391327642814
         }
     },
-    "orders_queue": [],
+    "orders_queue": [
+        {
+            "type": "SELL",
+            "symbol": "6442.TW",
+            "reason": "Swap to VRT"
+        },
+        {
+            "type": "BUY",
+            "symbol": "VRT",
+            "amount_usd": 523.3428318910966
+        }
+    ],
     "cooldown_dict": {
         "RKLX": "2025-12-30",
         "IONX": "2025-09-26",
@@ -37,5 +48,5 @@
         "ASTX": "2025-12-27",
         "8299.TWO": "2026-02-08"
     },
-    "last_processed_date": "2026-02-24"
+    "last_processed_date": "2026-02-25"
 }
