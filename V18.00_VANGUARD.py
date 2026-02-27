@@ -530,7 +530,7 @@ def run_live(dry_run=False):
     print(msg)
     if not dry_run and LINE_TOKEN and LINE_USER_ID:
         try:
-            requests.post('[https://api.line.me/v2/bot/message/push](https://api.line.me/v2/bot/message/push)', 
+            requests.post('https://api.line.me/v2/bot/message/push', 
                           headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {LINE_TOKEN}'},
                           json={"to": LINE_USER_ID, "messages": [{"type": "text", "text": msg}]})
         except Exception as e: print(f"LINE 發送失敗: {e}")
