@@ -1,3 +1,31 @@
+python - <<'PY'
+from pathlib import Path
+
+FILE = "V18.00_VANGUARD.py"
+
+p = Path(FILE)
+s = p.read_text(encoding="utf-8")
+
+# 只替換排版字元
+trans = {
+    "\u2018": "'",  # ‘
+    "\u2019": "'",  # ’
+    "\u201c": '"',  # “
+    "\u201d": '"',  # ”
+    "\u2013": "-",  # –
+    "\u2014": "-",  # —
+}
+
+original = s
+for k, v in trans.items():
+    s = s.replace(k, v)
+
+p.write_text(s, encoding="utf-8")
+
+print("✅ Typography cleaned.")
+print("Characters replaced:", sum(original.count(k) for k in trans))
+PY
+
 # =========================================================
 
 # V18.00 VANGUARD LIVE ENGINE (V2 優化版)
