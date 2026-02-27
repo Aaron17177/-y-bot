@@ -34,7 +34,7 @@ jobs:
         LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
         LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
       # 執行主程式
-      run: "python V181_Omega.py"
+      run: "python # V18.00 VANGUARD LIVE ENGINE (V2 優化版).py"
 
     - name: Commit state.json back to repository
       uses: stefanzweifel/git-auto-commit-action@v5
