@@ -30,7 +30,7 @@ import argparse
 import requests
 from datetime import datetime
 
-warnings.filterwarnings(“ignore”)
+warnings.filterwarnings("ignore")
 
 # =========================
 
