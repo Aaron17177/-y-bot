@@ -1,5 +1,5 @@
 {
-    "cash": 939.2260002304416,
+    "cash": 1442.2960775831707,
     "positions": {
         "3529.TWO": {
             "symbol": "3529.TWO",
@@ -7,7 +7,7 @@
             "entry_price": 74.5968385757624,
             "units": 1.0,
             "sector": "TW_STOCK",
-            "max_price": 83.20266102260595,
+            "max_price": 83.20852196654418,
             "current_price": 80.91054698379543
         },
         "8996.TW": {
@@ -18,23 +18,9 @@
             "sector": "TW_STOCK",
             "max_price": 30.507591095819595,
             "current_price": 28.110818497532087
-        },
-        "VRT": {
-            "symbol": "VRT",
-            "entry_date": "2026-02-26",
-            "entry_price": 260.6702938842773,
-            "units": 2.0056754610915486,
-            "sector": "US_GROWTH",
-            "max_price": 260.6702938842773,
-            "current_price": 259.2300109863281
         }
     },
     "orders_queue": [
-        {
-            "type": "SELL",
-            "symbol": "VRT",
-            "reason": "Regime Fail"
-        },
         {
             "type": "BUY",
             "symbol": "6739.TWO",
@@ -48,5 +34,5 @@
         "ASTX": "2025-12-27",
         "8299.TWO": "2026-02-08"
     },
-    "last_processed_date": "2026-02-26"
+    "last_processed_date": "2026-02-27"
 }
