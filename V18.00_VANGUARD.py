@@ -25,7 +25,6 @@ warnings.filterwarnings("ignore")
 # =========================
 # 1) Configuration & Secrets
 # =========================
-
 DATA_DOWNLOAD_DAYS = 250
 SLIPPAGE_RATE = 0.002
 RATES = {
@@ -49,7 +48,6 @@ LINE_USER_ID = os.getenv('LINE_USER_ID')
 # =========================
 # 2) Strategy Parameters
 # =========================
-
 SECTOR_PARAMS = {
     'CRYPTO_SPOT': {'stop': 0.40, 'zombie': 10, 'trail': {2.0: 0.25, 1.0: 0.30, 0.5: 0.35, 0.0: 0.40}},
     'CRYPTO_LEV':  {'stop': 0.50, 'zombie': 8,  'trail': {3.0: 0.30, 1.0: 0.40, 0.5: 0.45, 0.0: 0.50}},
@@ -106,7 +104,6 @@ ALL_TICKERS = list(set(list(ASSET_MAP.keys()) + ['SPY', 'QQQ', 'BTC-USD', '^TWII
 # =========================
 # 3) Live State & Position Engine
 # =========================
-
 class Position:
     def __init__(self, symbol, entry_date, entry_price, units, sector, max_price=None, current_price=None):
         self.symbol = symbol
@@ -183,7 +180,7 @@ def get_data(start_date=None):
     else:
         raw_close, close = data, data.ffill()
         open_, high, low = close.copy(), close.copy(), close.copy()
-
+    
     is_trading_day = ~raw_close.isna()
     twd_series = close['TWD=X'].ffill().bfill() if 'TWD=X' in close.columns else pd.Series(USD_TWD_RATE, index=close.index)
 
@@ -225,11 +222,11 @@ def sanitize_queue(positions, orders_queue):
             unique_orders.append(o)
             seen.add(key)
     queue = unique_orders
-
+    
     current_holding = len(positions)
     pending_sells = len([o for o in queue if o['type'] == 'SELL'])
     buys = [o for o in queue if o['type'] == 'BUY']
-
+    
     expected_total = current_holding - pending_sells + len(buys)
     if expected_total > MAX_TOTAL_POSITIONS:
         excess = expected_total - MAX_TOTAL_POSITIONS
@@ -240,11 +237,11 @@ def sanitize_queue(positions, orders_queue):
 
 def run_live(dry_run=False):
     print("🚀 Vanguard Live Engine 啟動...")
-
+    
     # --- [FIX_11] 先讀檔，根據您的買入日期，動態決定要抓多久的資料 ---
     state = load_state()
     positions = {sym: Position.from_dict(d) for sym, d in state['positions'].items()}
-
+    
     earliest_entry = pd.Timestamp(datetime.utcnow().date() - pd.Timedelta(days=DATA_DOWNLOAD_DAYS))
     if positions:
         min_entry = min([pos.entry_date for pos in positions.values()])
@@ -252,16 +249,16 @@ def run_live(dry_run=False):
             earliest_entry = min_entry - pd.Timedelta(days=5) # 提早5天策安全
             
     close, open_, high, low, is_trading_day, twd_series = get_data(start_date=earliest_entry)
-
+    
     # 抓取最新匯率供介面顯示
     latest_twd_rate = twd_series.iloc[-1] if not twd_series.empty else USD_TWD_RATE
-
+    
     today_utc = datetime.utcnow().date()
     completed_dates = [d for d in close.index if d.date() < today_utc]
     if not completed_dates: return
-
+    
     cash = state['cash']
-
+    
     # --- [FIX_10] 歷史最高價全自動掃描與修復機制 ---
     naive_high_idx = high.index.tz_localize(None) # 消除 yfinance 時區
     for sym, pos in positions.items():
@@ -279,12 +276,12 @@ def run_live(dry_run=False):
                 
     orders_queue = state['orders_queue']
     cooldown_dict = {sym: pd.Timestamp(d) for sym, d in state['cooldown_dict'].items()}
-
+    
     orders_queue = sanitize_queue(positions, orders_queue)
 
     last_processed = pd.Timestamp(state['last_processed_date'])
     dates_to_process = [d for d in completed_dates if d > last_processed]
-
+    
     ma20, ma50, ma60 = close.rolling(20).mean(), close.rolling(50).mean(), close.rolling(60).mean()
     benchmarks_ma = {b: close[b].rolling(100).mean() for b in ['SPY', 'QQQ', 'BTC-USD', '^TWII'] if b in close.columns}
     for b in list(benchmarks_ma.keys()): benchmarks_ma[f"{b}_50"] = close[b].rolling(50).mean()
@@ -297,12 +294,12 @@ def run_live(dry_run=False):
         valid_mom = (mom_20[t] > (0.08 if 'TW' in ASSET_MAP[t] else 0.05 if '3X' in ASSET_MAP[t] else 0.0)).fillna(False)
         mult = (1.0 + vol_20[t].fillna(0)) * (1.2 if t in TIER_1_ASSETS else 1.0)
         scores[t] = np.where(trend_ok & valid_mom, mom_20[t] * mult * (0.9 if 'TW' in ASSET_MAP[t] else 1.0), np.nan)
-
+    
     # [CR-02] 非交易日分數遮蔽：台股休市日不參與排名 (防止 ffill 假價格汙染信號)
     for t in ASSET_MAP.keys():
         if t in scores.columns and t in is_trading_day.columns:
             scores.loc[~is_trading_day[t], t] = np.nan
-
+    
     vix_series = close['^VIX'] if '^VIX' in close.columns else pd.Series(20, index=close.index)
 
     intraday_alerts = []
@@ -451,12 +448,22 @@ def run_live(dry_run=False):
     state['cooldown_dict'] = {sym: d.strftime('%Y-%m-%d') for sym, d in cooldown_dict.items()}
 
     if not dry_run: save_state(state)
-
+    
     total_eq = cash + sum(p.market_value for p in positions.values())
     latest_vix = vix_series.iloc[-1]
-
-    tw_open = "🟢" if is_trading_day['^TWII'].iloc[-1] else "🛑 休市"
-    us_open = "🟢" if is_trading_day['SPY'].iloc[-1] else "🛑 休市"
+    
+    # [CR_FIX_12] 市場狀態檢查：優先用「今天」的 is_trading_day，而不是 iloc[-1]
+    def _market_status(ticker, label):
+        today_ts = pd.Timestamp(today_utc)
+        if today_ts in is_trading_day.index and ticker in is_trading_day.columns:
+            return "🟢" if is_trading_day.loc[today_ts, ticker] else "🛑 休市"
+        # 今天無資料 → 用最後一筆資料日期（並標註是昨天）
+        last_date = close.index[-1]
+        if ticker in is_trading_day.columns:
+            return "🟢" if is_trading_day.loc[last_date, ticker] else "🛑 休市"
+        return "❓未知"
+    tw_open = _market_status('^TWII', '台股')
+    us_open = _market_status('SPY', '美股')
 
     def get_bull_bear(bench):
         if bench not in close.columns: return "❓未知"
@@ -477,13 +484,13 @@ def run_live(dry_run=False):
     msg += f"\n🌍 市場狀態：台股 {tw_open} | 美股 {us_open}"
     msg += f"\n🧭 板塊趨勢：美股 {us_status} | 台股 {tw_status} | 加密 {btc_status}"
     msg += f"\n🔒 VIX: {latest_vix:.1f} | 總資產估算: ${total_eq:,.0f}\n━━━━━━━━━━━━━━\n"
-
+    
     if intraday_alerts:
         msg += "🚨 【昨日盤中防禦觸發】(系統已記帳)\n" + "\n".join(intraday_alerts) + "\n--------------------\n"
 
     sells = [o for o in orders_queue if o['type'] == 'SELL']
     buys = [o for o in orders_queue if o['type'] == 'BUY']
-
+    
     if sells:
         msg += "🔴 【賣出指令】(請於開盤賣出)\n"
         for s in sells: msg += f"❌ 賣出 {s['symbol']} ({s.get('reason','')})\n"
