@@ -455,39 +455,29 @@ def run_live(dry_run=False):
 
     total_eq = cash + sum(p.market_value for p in positions.values())
     latest_vix = vix_series.iloc[-1]
-
-    # =====================================================================
-    # [CR_FIX_12] 市場狀態顯示修正
-    # 程式排程：台灣晚上 9 點 (UTC+8 21:00 = UTC 13:00)
-    #   台股：已收盤 (13:30 收)，yfinance 有今天的 bar → 直接看 is_trading_day
-    #   美股：尚未開盤 (22:30 才開)，yfinance 沒有今天的 bar → 不能用 is_trading_day
-    #   加密：24hr 交易，yfinance 有今天的 bar → 直接看 is_trading_day
-    #
-    # 邏輯：
-    #   1. 今天日期在 is_trading_day 中「有資料且為 True」→ 🟢 今日有交易
-    #   2. 今天日期在 is_trading_day 中「有資料且為 False/NaN」→ 🛑 今日休市
-    #   3. 今天日期「不在」is_trading_day index（美股尚無 bar）
-    #      → 回推：看最近 5 個交易日中同 weekday 是否有交易（排除假日）
-    #      → 若今天是週六日 → 🛑 休市
-    #      → 若今天是週一~五 → 🟡 待開盤（推定交易日，但尚無法確認）
-    # =====================================================================
+    # [CR_FIX_12 v2] Market status for TW 9PM schedule
+    # TW 9PM: TW already closed -> NaN = real holiday
+    #         US not yet open -> NaN = normal, NOT holiday
+    # yfinance union index has today (TW/crypto data exists)
+    # but SPY raw_close=NaN -> is_trading_day=False (expected!)
     def _market_status(ticker):
         tw_today = pd.Timestamp(today_utc)
-        
-        # 情況 1 & 2：今天在 yfinance 資料中（台股、加密幣通常走這條）
+        is_tw_market = (ticker == '^TWII')
         if tw_today in is_trading_day.index and ticker in is_trading_day.columns:
             val = is_trading_day.loc[tw_today, ticker]
             if pd.notna(val) and val:
                 return "🟢 今日有交易"
             else:
-                return "🛑 今日休市"
-        
-        # 情況 3：今天不在 yfinance 資料中（美股在台灣晚上 9 點還沒開盤）
-        if tw_today.weekday() >= 5:  # 週六=5, 週日=6
+                # TW: already closed, NaN = genuine holiday
+                # US: not yet open, NaN = normal on weekdays
+                if is_tw_market:
+                    return "🛑 今日休市"
+                else:
+                    return "🟡 待開盤" if tw_today.weekday() < 5 else "🛑 休市"
+        # Today not in index (all markets have no data)
+        if tw_today.weekday() >= 5:
             return "🛑 休市"
-        
-        # 週一~五但尚無資料 → 推定為交易日（美國假日例外，但無法預知）
-        return "🟡 待開盤"
+        return "🛑 今日休市" if is_tw_market else "🟡 待開盤"
 
     tw_open = _market_status('^TWII')
     us_open = _market_status('SPY')
