@@ -59,29 +59,33 @@ ASSET_MAP = {
     'BTC-USD': 'CRYPTO_SPOT',
     # [CR-06] SOL-USD, NEAR-USD 移除 (CRYPTO_SPOT 老鼠屎)
     'AVAX-USD': 'CRYPTO_SPOT',
-    'KAS-USD': 'CRYPTO_SPOT', 'RENDER-USD': 'CRYPTO_SPOT',
+    'KAS-USD': 'CRYPT_MEME', 'RENDER-USD': 'CRYPTO_MEME',
+    'ETH-USD': 'CRYPTO_SPOT','SOL-USD': 'CRYPTO_SPOT', 'NEAR-USD': 'CRYPTO_MEME',
     'DOGE-USD': 'CRYPTO_MEME', 'SHIB-USD': 'CRYPTO_MEME', 'BONK-USD': 'CRYPTO_MEME',
     'PEPE24478-USD': 'CRYPTO_MEME', 'WIF-USD': 'CRYPTO_MEME',
     # [CR-06] SUI20947-USD 移除; [CR-08] ENA-USD 移除
     'TAO22974-USD': 'CRYPTO_MEME',
-    'FNGU': 'LEV_3X',
+
+    'FNGU': 'LEV_2X',
     # [CR-08] NVDL 移除
-    'ASTX': 'LEV_2X',
+    'ASTX': 'LEV_2X','GGLL':'US_GROWTH',
     'HOOX': 'LEV_2X', 'IONX': 'LEV_2X', 'OKLL': 'LEV_2X', 'RKLX': 'LEV_2X',
     'LUNR': 'US_GROWTH', 'QUBT': 'US_GROWTH',
     'PLTR': 'US_GROWTH', 'CRWD': 'US_GROWTH', 'PANW': 'US_GROWTH',
+    
 
-    'APP': 'US_GROWTH','CRCL': 'US_GROWTH',
+    'APP': 'US_GROWTH','BE':'US_GROWTH','ISRG':'US_GROWTH',
+    'CRCL': 'US_GROWTH','MU':'US_STOCK','SNDK':'US_STOCK',
 
     'LEU': 'US_GROWTH','BE': 'US_GROWTH',
 
     'IONQ': 'US_GROWTH', 'RGTI': 'US_GROWTH', 'RKLB': 'US_GROWTH', 'VRT': 'US_GROWTH',
     'VST': 'US_GROWTH', 'ASTS': 'US_GROWTH', 'OKLO': 'US_GROWTH',
     'HOOD': 'US_GROWTH', 'SERV': 'US_GROWTH',
-    'GLD': 'US_STOCK',
+    'GLD': 'US_STOCK','GLW': 'US_STOCK',
     # === A/B Test 倖存者保留 ===
     # [CR-08] UGL 移除; [CR-06] PENDLE-USD 移除
-    'AGQ': 'LEV_2X',
+    'AGQ': 'US_STOCK',
     'ALAB': 'US_GROWTH', 'ARM': 'US_GROWTH', 'CEG': 'US_GROWTH', 'URA': 'US_STOCK',
     # [CR-06] PENDLE-USD 移除
     '2317.TW': 'TW_STOCK', '8996.TW': 'TW_STOCK',
@@ -93,8 +97,8 @@ ASSET_MAP = {
 }
 
 TIER_1_ASSETS = [
-    'RGTI', 'QUBT', 'ASTS', 'IONQ', 'LUNR', 'RKLB', 'PLTR', 'VST',
-    'DOGE-USD', 'BONK-USD', 'WIF-USD', 'KAS-USD', 'RENDER-USD'
+    'RGTI', 'QUBT', 'ASTS','ASTX' ,'IONX','IONQ', 'RKLB','RKLX', 'VST','BE','BTC','ETH','BONK','DOGE','LUNR','SNDK',
+    'AGQ','ALAB','PLTR',
 ]
 
 ALL_TICKERS = list(set(list(ASSET_MAP.keys()) + ['SPY', 'QQQ', 'BTC-USD', '^TWII', '^HSI', '^VIX', 'TWD=X']))
