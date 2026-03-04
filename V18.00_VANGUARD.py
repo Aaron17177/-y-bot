@@ -65,43 +65,50 @@ SECTOR_PARAMS = {
 }
 
 ASSET_MAP = {
-    # --- CRYPTO_SPOT (CR-06: 移除 SOL, ADA, NEAR, HBAR, SUI, PENDLE; 保留 4 個) ---
+    # [CR-06] ADA-USD, HBAR-USD 移除 (CRYPTO_SPOT 老鼠屎)
     'BTC-USD': 'CRYPTO_SPOT',
+    # [CR-06] SOL-USD, NEAR-USD 移除 (CRYPTO_SPOT 老鼠屎)
     'AVAX-USD': 'CRYPTO_SPOT',
-    'KAS-USD': 'CRYPTO_SPOT', 'RENDER-USD': 'CRYPTO_SPOT',
-    # --- CRYPTO_MEME (CR-08: 移除 ENA, FLOKI) ---
+    'KAS-USD': 'CRYPT_MEME', 'RENDER-USD': 'CRYPTO_MEME',
+    'ETH-USD': 'CRYPTO_SPOT','SOL-USD': 'CRYPTO_SPOT', 'NEAR-USD': 'CRYPTO_MEME',
     'DOGE-USD': 'CRYPTO_MEME', 'SHIB-USD': 'CRYPTO_MEME', 'BONK-USD': 'CRYPTO_MEME',
     'PEPE24478-USD': 'CRYPTO_MEME', 'WIF-USD': 'CRYPTO_MEME',
+    # [CR-06] SUI20947-USD 移除; [CR-08] ENA-USD 移除
     'TAO22974-USD': 'CRYPTO_MEME',
-    # --- LEV_2X (CR-08: 移除 NVDL, UGL) ---
-    'FNGU': 'LEV_3X',
-    'ASTX': 'LEV_2X',
+
+    'FNGU': 'LEV_2X',
+    # [CR-08] NVDL 移除
+    'ASTX': 'LEV_2X','GGLL':'US_GROWTH',
     'HOOX': 'LEV_2X', 'IONX': 'LEV_2X', 'OKLL': 'LEV_2X', 'RKLX': 'LEV_2X',
-    # --- US_GROWTH (CR-08: 移除 SMCI, SHOP, VKTX) ---
     'LUNR': 'US_GROWTH', 'QUBT': 'US_GROWTH',
     'PLTR': 'US_GROWTH', 'CRWD': 'US_GROWTH', 'PANW': 'US_GROWTH',
-    'APP': 'US_GROWTH','CRCL': 'US_GROWTH',
+    
+
+    'APP': 'US_GROWTH','BE':'US_GROWTH','ISRG':'US_GROWTH',
+    'CRCL': 'US_GROWTH','MU':'US_STOCK','SNDK':'US_STOCK',
 
     'LEU': 'US_GROWTH','BE': 'US_GROWTH',
+
     'IONQ': 'US_GROWTH', 'RGTI': 'US_GROWTH', 'RKLB': 'US_GROWTH', 'VRT': 'US_GROWTH',
     'VST': 'US_GROWTH', 'ASTS': 'US_GROWTH', 'OKLO': 'US_GROWTH',
     'HOOD': 'US_GROWTH', 'SERV': 'US_GROWTH',
-    # --- US_STOCK ---
-    'GLD': 'US_STOCK',
-    # --- A/B Test 倖存者 (CR-08: 移除 UGL) ---
-    'AGQ': 'LEV_2X',
+    'GLD': 'US_STOCK','GLW': 'US_STOCK',
+    # === A/B Test 倖存者保留 ===
+    # [CR-08] UGL 移除; [CR-06] PENDLE-USD 移除
+    'AGQ': 'US_STOCK',
     'ALAB': 'US_GROWTH', 'ARM': 'US_GROWTH', 'CEG': 'US_GROWTH', 'URA': 'US_STOCK',
-    # --- TW_STOCK (CR-08: 移除 2359, 8054, 6531, 2603, 2609) ---
+    # [CR-06] PENDLE-USD 移除
     '2317.TW': 'TW_STOCK', '8996.TW': 'TW_STOCK',
     '6442.TW': 'TW_STOCK', '8299.TWO': 'TW_STOCK', '3529.TWO': 'TW_STOCK', '6739.TWO': 'TW_STOCK',
+    # [CR-08] 2359.TW, 8054.TWO 移除
     '3035.TW': 'TW_STOCK',
+    # [CR-08] 6531.TW 移除
     '3324.TWO': 'TW_STOCK',
 }
 
-# 目前 TIER_1_ASSETS 保持不變
 TIER_1_ASSETS = [
-    'RGTI', 'QUBT', 'ASTS', 'IONQ', 'LUNR', 'RKLB', 'PLTR', 'VST',
-    'DOGE-USD', 'BONK-USD', 'WIF-USD', 'KAS-USD', 'RENDER-USD'
+    'RGTI', 'QUBT', 'ASTS','ASTX' ,'IONX','IONQ', 'RKLB','RKLX', 'VST','BE','BTC','ETH','BONK','DOGE','LUNR','SNDK',
+    'AGQ','ALAB','PLTR',
 ]
 
 ALL_TICKERS = list(set(list(ASSET_MAP.keys()) + ['SPY', 'QQQ', 'BTC-USD', '^TWII', '^HSI', '^VIX', 'TWD=X']))
