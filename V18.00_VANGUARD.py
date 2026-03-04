@@ -74,13 +74,15 @@ ASSET_MAP = {
     'PEPE24478-USD': 'CRYPTO_MEME', 'WIF-USD': 'CRYPTO_MEME',
     'TAO22974-USD': 'CRYPTO_MEME',
     # --- LEV_2X (CR-08: 移除 NVDL, UGL) ---
-    'GGLL': 'LEV_2X', 'FNGU': 'LEV_3X',
+    'FNGU': 'LEV_3X',
     'ASTX': 'LEV_2X',
     'HOOX': 'LEV_2X', 'IONX': 'LEV_2X', 'OKLL': 'LEV_2X', 'RKLX': 'LEV_2X',
     # --- US_GROWTH (CR-08: 移除 SMCI, SHOP, VKTX) ---
     'LUNR': 'US_GROWTH', 'QUBT': 'US_GROWTH',
     'PLTR': 'US_GROWTH', 'CRWD': 'US_GROWTH', 'PANW': 'US_GROWTH',
-    'APP': 'US_GROWTH',
+    'APP': 'US_GROWTH','CRCL': 'US_GROWTH',
+
+    'LEU': 'US_GROWTH','BE': 'US_GROWTH',
     'IONQ': 'US_GROWTH', 'RGTI': 'US_GROWTH', 'RKLB': 'US_GROWTH', 'VRT': 'US_GROWTH',
     'VST': 'US_GROWTH', 'ASTS': 'US_GROWTH', 'OKLO': 'US_GROWTH',
     'HOOD': 'US_GROWTH', 'SERV': 'US_GROWTH',
