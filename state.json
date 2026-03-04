@@ -1,46 +1,35 @@
 {
-    "cash": 919.9787094631362,
+    "cash": 1365.9455420724894,
     "positions": {
         "3529.TWO": {
             "symbol": "3529.TWO",
             "entry_date": "2026-02-24",
             "entry_price": 74.5968385757624,
-            "units": 1.0,
+            "units": 1,
             "sector": "TW_STOCK",
-            "max_price": 83.20852196654418,
-            "current_price": 81.11553784860558
+            "max_price": 74.5968385757624,
+            "current_price": 74.5968385757624
         },
-        "8996.TW": {
-            "symbol": "8996.TW",
-            "entry_date": "2026-02-23",
-            "entry_price": 28.005748044068337,
-            "units": 1.0,
+        "6442.TW": {
+            "symbol": "6442.TW",
+            "entry_date": "2026-02-04",
+            "entry_price": 58.15104582468465,
+            "units": 1,
             "sector": "TW_STOCK",
-            "max_price": 30.507591095819595,
-            "current_price": 28.01593625498008
+            "max_price": 58.15104582468465,
+            "current_price": 58.15104582468465
         },
         "6739.TWO": {
             "symbol": "6739.TWO",
-            "entry_date": "2026-03-02",
-            "entry_price": 32.255617529880475,
-            "units": 16.2006629919708,
+            "entry_date": "2026-03-04",
+            "entry_price": 29.410825482995367,
+            "units": 1,
             "sector": "TW_STOCK",
-            "max_price": 34.42231075697211,
-            "current_price": 32.669322709163346
+            "max_price": 29.410825482995367,
+            "current_price": 29.410825482995367
         }
     },
-    "orders_queue": [
-        {
-            "type": "SELL",
-            "symbol": "8996.TW",
-            "reason": "Swap to 6442.TW"
-        },
-        {
-            "type": "BUY",
-            "symbol": "6442.TW",
-            "amount_usd": 415.5666322543508
-        }
-    ],
+    "orders_queue": [],
     "cooldown_dict": {
         "RKLX": "2025-12-30",
         "IONX": "2025-09-26",
@@ -48,5 +37,5 @@
         "ASTX": "2025-12-27",
         "8299.TWO": "2026-02-08"
     },
-    "last_processed_date": "2026-03-02"
+    "last_processed_date": "2026-03-04"
 }
