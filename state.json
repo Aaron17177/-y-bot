@@ -1,5 +1,5 @@
 {
-    "cash": 1430.6547136844827,
+    "cash": 1430.8084515281723,
     "positions": {
         "3529.TWO": {
             "symbol": "3529.TWO",
@@ -8,7 +8,7 @@
             "units": 1.0,
             "sector": "TW_STOCK",
             "max_price": 83.20852196654418,
-            "current_price": 74.9077779132801
+            "current_price": 68.86294495885822
         },
         "6739.TWO": {
             "symbol": "6739.TWO",
@@ -17,10 +17,16 @@
             "units": 1.0,
             "sector": "TW_STOCK",
             "max_price": 33.74878279507257,
-            "current_price": 32.909274815457785
+            "current_price": 29.714832413753893
         }
     },
-    "orders_queue": [],
+    "orders_queue": [
+        {
+            "type": "SELL",
+            "symbol": "3529.TWO",
+            "reason": "Zombie"
+        }
+    ],
     "cooldown_dict": {
         "RKLX": "2025-12-30",
         "IONX": "2025-09-26",
@@ -29,5 +35,5 @@
         "8299.TWO": "2026-02-08",
         "6442.TW": "2026-03-10"
     },
-    "last_processed_date": "2026-03-08"
+    "last_processed_date": "2026-03-09"
 }
