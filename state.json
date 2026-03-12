@@ -1,14 +1,23 @@
 {
-    "cash": 1430.9637545307232,
+    "cash": 1354.206234631953,
     "positions": {
         "6739.TWO": {
             "symbol": "6739.TWO",
             "entry_date": "2026-03-04",
             "entry_price": 29.410825482995367,
-            "units": 1.0,
+            "units": 1,
             "sector": "TW_STOCK",
             "max_price": 34.414481510264245,
             "current_price": 31.629734755599394
+        },
+        "3529.TWO": {
+            "symbol": "3529.TWO",
+            "entry_date": "2026-03-12",
+            "entry_price": 76.75376536804704,
+            "units": 1,
+            "sector": "TW_STOCK",
+            "max_price": 76.75376536804704,
+            "current_price": 76.75376536804704
         }
     },
     "orders_queue": [
@@ -26,5 +35,5 @@
         "8299.TWO": "2026-02-08",
         "6442.TW": "2026-03-10"
     },
-    "last_processed_date": "2026-03-11"
+    "last_processed_date": "2026-03-12"
 }
