@@ -8,6 +8,7 @@
 # CR-08: 移除 12 個反覆虧損標的
 # CR-09: CRYPTO_SPOT 維持 MIN_HOLD=3 (高波動幣分開處理)
 # CR_FIX_12: 市場狀態顯示修正 (適配台灣晚上9點排程)
+# CR_FIX_13: 孤兒賣出指令修正 (持倉不存在時直接丟棄)
 # 保留: CR_FIX_05/07/08/09/10/11 全部 Live 基礎設施
 # =========================================================
 
@@ -328,10 +329,11 @@ def run_live(dry_run=False):
 
         for o in sell_orders:
             sym = o['symbol']
+            # [CR_FIX_13] 先檢查持倉是否存在，避免孤兒賣出指令卡在隊列
+            if sym not in positions: continue
             if not is_trading_day.loc[tomorrow, sym] or pd.isna(open_.loc[tomorrow, sym]): 
                 pending_orders.append(o)
                 continue
-            if sym not in positions: continue
             exec_price = open_.loc[tomorrow, sym] * (1 - SLIPPAGE_RATE)
             comm, tax = get_costs(positions[sym].sector, sym, positions[sym].units * exec_price, 'SELL')
             cash += (positions[sym].units * exec_price) - comm - tax
