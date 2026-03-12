@@ -9,6 +9,7 @@
 # CR-09: CRYPTO_SPOT 維持 MIN_HOLD=3 (高波動幣分開處理)
 # CR_FIX_12: 市場狀態顯示修正 (適配台灣晚上9點排程)
 # CR_FIX_13: 孤兒賣出指令修正 (持倉不存在時直接丟棄)
+# CR_FIX_14: 孤兒買入指令修正 (已持有時直接丟棄)
 # 保留: CR_FIX_05/07/08/09/10/11 全部 Live 基礎設施
 # =========================================================
 
@@ -341,6 +342,8 @@ def run_live(dry_run=False):
 
         for o in buy_orders:
             sym, amount = o['symbol'], o['amount_usd']
+            # [CR_FIX_14] 已持有該標的則丟棄孤兒買入指令
+            if sym in positions: continue
             if not is_trading_day.loc[tomorrow, sym] or pd.isna(open_.loc[tomorrow, sym]):
                 pending_orders.append(o)
                 continue
