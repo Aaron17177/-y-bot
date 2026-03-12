@@ -294,6 +294,11 @@ def run_live(dry_run=False):
 
     orders_queue = sanitize_queue(positions, orders_queue)
 
+    # [CR_FIX_13/14] 孤兒指令清理：迴圈外先清一次，避免 dates_to_process 為空時指令永遠卡著
+    orders_queue = [o for o in orders_queue
+                    if not (o['type'] == 'SELL' and o['symbol'] not in positions)
+                    and not (o['type'] == 'BUY' and o['symbol'] in positions)]
+
     last_processed = pd.Timestamp(state['last_processed_date'])
     dates_to_process = [d for d in completed_dates if d > last_processed]
 
