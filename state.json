@@ -7,7 +7,7 @@
             "entry_price": 29.410825482995367,
             "units": 1.0,
             "sector": "TW_STOCK",
-            "max_price": 34.414481510264245,
+            "max_price": 34.71785945474566,
             "current_price": 31.629734755599394
         },
         "3529.TWO": {
@@ -16,17 +16,11 @@
             "entry_price": 76.75376536804704,
             "units": 1.0,
             "sector": "TW_STOCK",
-            "max_price": 78.06119333375834,
+            "max_price": 78.07591017650945,
             "current_price": 76.75376536804704
         }
     },
-    "orders_queue": [
-        {
-            "type": "BUY",
-            "symbol": "3529.TWO",
-            "amount_usd": 390.0249304763527
-        }
-    ],
+    "orders_queue": [],
     "cooldown_dict": {
         "RKLX": "2025-12-30",
         "IONX": "2025-09-26",
