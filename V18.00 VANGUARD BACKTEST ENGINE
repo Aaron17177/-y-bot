@@ -8,25 +8,22 @@
 #   CR-04: 新增 print_performance() 績效報表
 #   CR-05: 新增 print_diagnostics() 板塊深度診斷
 # =========================================================
-
 import yfinance as yf
 import pandas as pd
 import numpy as np
 import warnings
 import sys
 from datetime import datetime
-
 warnings.filterwarnings("ignore")
-
 # =========================
 # 1) Configuration (與 Live Engine 完全一致)
 # =========================
 SLIPPAGE_RATE = 0.002
 RATES = {
     'CRYPTO_COMM': 0.001, 'US_COMM': 0.001, 'TW_COMM': 0.001425 * 0.22,
+    'LEV_COMM': 0.001,
     'TW_TAX_STOCK': 0.003, 'TW_TAX_ETF': 0.001
 }
-
 GAP_UP_LIMIT = 0.10
 PANIC_VIX_THRESHOLD = 40.0
 # [CR-07] MIN_HOLD_DAYS 3→5 (減少短持巨虧)
@@ -36,7 +33,6 @@ MIN_HOLD_DAYS_CRYPTO_SPOT = 3
 USD_TWD_RATE = 32.5
 MAX_TOTAL_POSITIONS = 3
 BASE_POSITION_SIZE = 1.0 / MAX_TOTAL_POSITIONS
-
 # =========================
 # 2) Strategy Parameters (與 Live Engine 一致 + CR-01 修正)
 # =========================
@@ -53,7 +49,6 @@ SECTOR_PARAMS = {
     'US_GROWTH':   {'stop': 0.40, 'zombie': 10, 'trail': {1.0: 0.25, 0.5: 0.30, 0.2: 0.35, 0.0: 0.40}},
     'DEFAULT':     {'stop': 0.30, 'zombie': 10, 'trail': {1.0: 0.20, 0.5: 0.25, 0.0: 0.30}}
 }
-
 ASSET_MAP = {
     # [CR-06] ADA-USD, HBAR-USD 移除 (CRYPTO_SPOT 老鼠屎)
     'BTC-USD': 'CRYPTO_SPOT',
@@ -65,7 +60,6 @@ ASSET_MAP = {
     'PEPE24478-USD': 'CRYPTO_MEME', 'WIF-USD': 'CRYPTO_MEME',
     # [CR-06] SUI20947-USD 移除; [CR-08] ENA-USD 移除
     'TAO22974-USD': 'CRYPTO_MEME',
-
     'FNGU': 'LEV_2X',
     # [CR-08] NVDL 移除
     'ASTX': 'LEV_2X','GGLL':'US_GROWTH',
@@ -73,12 +67,9 @@ ASSET_MAP = {
     'LUNR': 'US_GROWTH', 'QUBT': 'US_GROWTH',
     'PLTR': 'US_GROWTH', 'CRWD': 'US_GROWTH', 'PANW': 'US_GROWTH',
     
-
     'APP': 'US_GROWTH','BE':'US_GROWTH','ISRG':'US_GROWTH',
     'CRCL': 'US_GROWTH','MU':'US_STOCK','SNDK':'US_STOCK',
-
-    'LEU': 'US_GROWTH','BE': 'US_GROWTH',
-
+    'LEU': 'US_GROWTH',
     'IONQ': 'US_GROWTH', 'RGTI': 'US_GROWTH', 'RKLB': 'US_GROWTH', 'VRT': 'US_GROWTH',
     'VST': 'US_GROWTH', 'ASTS': 'US_GROWTH', 'OKLO': 'US_GROWTH',
     'HOOD': 'US_GROWTH', 'SERV': 'US_GROWTH',
@@ -90,19 +81,25 @@ ASSET_MAP = {
     # [CR-06] PENDLE-USD 移除
     '2317.TW': 'TW_STOCK', '8996.TW': 'TW_STOCK',
     '6442.TW': 'TW_STOCK', '8299.TWO': 'TW_STOCK', '3529.TWO': 'TW_STOCK', '6739.TWO': 'TW_STOCK',
-    # [CR-08] 2359.TW, 8054.TWO 移除
     '3035.TW': 'TW_STOCK',
-    # [CR-08] 6531.TW 移除
     '3324.TWO': 'TW_STOCK',
+    # --- V18.01 ---
+    'MSTR': 'US_GROWTH', 'COIN': 'US_GROWTH', 'MARA': 'US_GROWTH',
+    'SMCI': 'US_GROWTH', 'AXON': 'US_GROWTH',
+    '00670L.TW': 'TW_STOCK', '00757.TW': 'TW_STOCK',
+    'XRP-USD': 'CRYPTO_SPOT', 'SUI20947-USD': 'CRYPTO_MEME',
+    # --- V18.02 ---
+    'NVDA': 'US_GROWTH', 'TSLA': 'US_GROWTH', 'META': 'US_GROWTH',
+    'AVGO': 'US_GROWTH', 'AMD': 'US_GROWTH',
+    'SHOP': 'US_GROWTH', 'NET': 'US_GROWTH', 'ANET': 'US_GROWTH',
 }
-
 TIER_1_ASSETS = [
-    'RGTI', 'QUBT', 'ASTS','ASTX' ,'IONX','IONQ', 'RKLB','RKLX', 'VST','BE','BTC','ETH','BONK','DOGE','LUNR','SNDK',
-    'AGQ','ALAB','PLTR',
+    'RGTI', 'QUBT', 'ASTS', 'ASTX', 'IONX', 'IONQ', 'RKLB', 'RKLX',
+    'VST', 'BE', 'BTC-USD', 'ETH-USD', 'BONK-USD', 'DOGE-USD',
+    'LUNR', 'SNDK', 'AGQ', 'ALAB', 'PLTR',
+    'MSTR', 'COIN', 'NVDA', 'TSLA', 'META', 'AVGO',
 ]
-
 ALL_TICKERS = list(set(list(ASSET_MAP.keys()) + ['SPY', 'QQQ', 'BTC-USD', '^TWII', '^HSI', '^VIX', 'TWD=X']))
-
 # =========================
 # 3) Position Class (與 Live Engine 完全一致)
 # =========================
@@ -115,54 +112,43 @@ class Position:
         self.sector = sector
         self.max_price = float(max_price) if max_price else float(entry_price)
         self.current_price = float(current_price) if current_price else float(entry_price)
-
     @property
     def market_value(self):
         return self.units * self.current_price
-
     def get_params(self):
         return SECTOR_PARAMS.get(self.sector, SECTOR_PARAMS['DEFAULT'])
-
     def check_intraday_exit(self, open_p, high_p, low_p, curr_vix=20.0):
         params = self.get_params()
         stop_threshold = self.entry_price * (1 - params['stop'])
         effective_peak = max(self.max_price, open_p)
         profit_ratio = (effective_peak - self.entry_price) / self.entry_price
         trail_pct = params['stop']
-
         for threshold, pct in sorted(params['trail'].items(), key=lambda x: x[0], reverse=True):
             if profit_ratio >= threshold:
                 trail_pct = pct
                 break
-
         if curr_vix > 30.0:
-            trail_pct *= 0.5
+            trail_pct = min(trail_pct * 1.3, params['stop'])
         trail_price = effective_peak * (1 - trail_pct)
         final_exit_price = max(trail_price, stop_threshold)
-
         if open_p < final_exit_price:
             return True, open_p, "GAP_STOP" if open_p < stop_threshold else "GAP_TRAIL"
         if low_p <= final_exit_price:
             return True, final_exit_price, "HARD_STOP" if final_exit_price == stop_threshold else "TRAIL_EXIT"
-
         if high_p > self.max_price:
             self.max_price = high_p
         return False, 0.0, ""
-
-
 # =========================
 # 4) Shared Utility Functions (與 Live Engine 完全一致)
 # =========================
 def get_sector(sym):
     return ASSET_MAP.get(sym, 'US_STOCK')
-
 def get_costs(sector, sym, gross_amount, action):
     comm = gross_amount * RATES.get(f"{sector.split('_')[0]}_COMM", RATES['US_COMM'])
     tax = 0.0
     if action == 'SELL' and 'TW' in sector:
         tax = gross_amount * (RATES['TW_TAX_ETF'] if sym.startswith('00') else RATES['TW_TAX_STOCK'])
     return comm, tax
-
 def check_regime(date, sym, close_df, benchmarks_ma):
     sector = get_sector(sym)
     bench = 'BTC-USD' if 'CRYPTO' in sector else '^TWII' if 'TW_' in sector else '^HSI' if 'CN_' in sector else 'QQQ'
@@ -176,7 +162,6 @@ def check_regime(date, sym, close_df, benchmarks_ma):
     if ma50 is not None and not pd.isna(ma50.loc[date]):
         return (price > ma100) and (ma50.loc[date] > ma100)
     return price > ma100
-
 def sanitize_queue(positions, orders_queue):
     unique_orders = []
     seen = set()
@@ -186,19 +171,15 @@ def sanitize_queue(positions, orders_queue):
             unique_orders.append(o)
             seen.add(key)
     queue = unique_orders
-
     current_holding = len(positions)
     pending_sells = len([o for o in queue if o['type'] == 'SELL'])
     buys = [o for o in queue if o['type'] == 'BUY']
-
     expected_total = current_holding - pending_sells + len(buys)
     if expected_total > MAX_TOTAL_POSITIONS:
         excess = expected_total - MAX_TOTAL_POSITIONS
         buys_to_remove = buys[-excess:]
         queue = [o for o in queue if o not in buys_to_remove]
-
     return queue
-
 def get_data(start_date):
     start_str = start_date.strftime('%Y-%m-%d')
     data = yf.download(ALL_TICKERS, start=start_str, progress=False, auto_adjust=True)
@@ -214,25 +195,19 @@ def get_data(start_date):
         open_ = close.copy()
         high = close.copy()
         low = close.copy()
-
     is_trading_day = ~raw_close.isna()
     twd_series = close['TWD=X'].ffill().bfill() if 'TWD=X' in close.columns else pd.Series(USD_TWD_RATE, index=close.index)
-
     for col in close.columns:
         if '.TW' in col or '.TWO' in col:
             close[col] /= twd_series
             open_[col] /= twd_series
             high[col] /= twd_series
             low[col] /= twd_series
-
     cols_to_drop = [c for c in close.columns if c == 'TWD=X']
     if cols_to_drop:
         for df in [close, open_, high, low, is_trading_day]:
             df.drop(columns=cols_to_drop, inplace=True)
-
     return close, open_, high, low, is_trading_day, twd_series
-
-
 # =========================
 # 5) [CR-03] Backtest Engine
 # =========================
@@ -247,25 +222,20 @@ def run_backtest(start_date_str, end_date_str, initial_capital_usd=None):
     """
     if initial_capital_usd is None:
         initial_capital_usd = 100000.0 / USD_TWD_RATE
-
     print(f"🔬 Vanguard Backtest Engine 啟動")
     print(f"   期間: {start_date_str} ~ {end_date_str}")
     print(f"   初始資金: ${initial_capital_usd:,.2f} USD")
     print(f"   下載資料中...")
-
     # --- 下載資料 (需要額外 buffer 給 MA 計算) ---
     bt_start = pd.Timestamp(start_date_str)
     data_start = bt_start - pd.Timedelta(days=200)  # MA100 + buffer
     close, open_, high, low, is_trading_day, twd_series = get_data(start_date=data_start)
-
     bt_end = pd.Timestamp(end_date_str)
     all_dates = [d for d in close.index if bt_start <= d <= bt_end]
     if not all_dates:
         print("❌ 回測期間內無可用資料")
         return None, None
-
     print(f"   資料載入完成，共 {len(all_dates)} 個交易日")
-
     # --- 技術指標 (與 Live Engine 完全一致) ---
     ma20 = close.rolling(20).mean()
     ma50 = close.rolling(50).mean()
@@ -273,10 +243,8 @@ def run_backtest(start_date_str, end_date_str, initial_capital_usd=None):
     benchmarks_ma = {b: close[b].rolling(100).mean() for b in ['SPY', 'QQQ', 'BTC-USD', '^TWII'] if b in close.columns}
     for b in list(benchmarks_ma.keys()):
         benchmarks_ma[f"{b}_50"] = close[b].rolling(50).mean()
-
     mom_20 = close.pct_change(20)
     vol_20 = close.pct_change().rolling(20).std() * np.sqrt(252)
-
     # --- 動能分數 (與 Live Engine 完全一致) ---
     scores = pd.DataFrame(index=close.index, columns=close.columns)
     for t in ASSET_MAP.keys():
@@ -286,39 +254,31 @@ def run_backtest(start_date_str, end_date_str, initial_capital_usd=None):
         valid_mom = (mom_20[t] > (0.08 if 'TW' in ASSET_MAP[t] else 0.05 if '3X' in ASSET_MAP[t] else 0.0)).fillna(False)
         mult = (1.0 + vol_20[t].fillna(0)) * (1.2 if t in TIER_1_ASSETS else 1.0)
         scores[t] = np.where(trend_ok & valid_mom, mom_20[t] * mult * (0.9 if 'TW' in ASSET_MAP[t] else 1.0), np.nan)
-
     # [CR-02] 非交易日動能分數遮蔽：休市日的分數設為 NaN，不參與排名/換倉
     for t in ASSET_MAP.keys():
         if t in scores.columns and t in is_trading_day.columns:
             scores.loc[~is_trading_day[t], t] = np.nan
-
     vix_series = close['^VIX'] if '^VIX' in close.columns else pd.Series(20, index=close.index)
-
+    MIN_SCORE_THRESHOLD = 0.02
     # --- 初始狀態 (回測從零開始) ---
     cash = initial_capital_usd
     positions = {}
     orders_queue = []
     cooldown_dict = {}
-
     trade_log = []
     equity_curve = []
-
     print(f"   開始回測主迴圈...")
-
     # --- 主迴圈 (與 Live Engine run_live() 邏輯完全一致) ---
     for i, date in enumerate(all_dates):
         date_idx = list(close.index).index(date)
         if date_idx == 0:
             continue
-
         today = close.index[date_idx - 1]   # 前一根 bar (訊號日)
         tomorrow = date                       # 當前 bar (執行日)
-
         # === 1) 執行掛單: 先賣後買 ===
         sell_orders = [o for o in orders_queue if o['type'] == 'SELL']
         buy_orders = [o for o in orders_queue if o['type'] == 'BUY']
         pending_orders = []
-
         for o in sell_orders:
             sym = o['symbol']
             if sym not in is_trading_day.columns or not is_trading_day.loc[tomorrow, sym] or pd.isna(open_.loc[tomorrow, sym]):
@@ -332,7 +292,6 @@ def run_backtest(start_date_str, end_date_str, initial_capital_usd=None):
             gross_pnl = (exec_price - pos.entry_price) * pos.units
             net_pnl = gross_pnl - comm - tax - (pos.entry_price * pos.units * SLIPPAGE_RATE)  # 扣買入滑價估算
             cash += (pos.units * exec_price) - comm - tax
-
             # Trade log: 記錄賣出
             trade_log.append({
                 'timestamp': tomorrow.strftime('%Y-%m-%d'),
@@ -353,36 +312,30 @@ def run_backtest(start_date_str, end_date_str, initial_capital_usd=None):
                 'bar_low': low.loc[tomorrow, sym] if sym in low.columns else np.nan,
             })
             del positions[sym]
-
         for o in buy_orders:
             sym = o['symbol']
             amount = o['amount_usd']
             if sym not in is_trading_day.columns or not is_trading_day.loc[tomorrow, sym] or pd.isna(open_.loc[tomorrow, sym]):
                 pending_orders.append(o)
                 continue
-
             has_pending_sells = any(x['type'] == 'SELL' for x in pending_orders)
             if cash < amount * 0.90 and has_pending_sells:
                 pending_orders.append(o)
                 continue
-
             if cash <= 0:
                 continue
             if sym in close.columns and today in close.index and not pd.isna(close.loc[today, sym]) and close.loc[today, sym] > 0:
                 if (open_.loc[tomorrow, sym] / close.loc[today, sym]) > (1 + GAP_UP_LIMIT):
                     continue
-
             exec_price = open_.loc[tomorrow, sym] * (1 + SLIPPAGE_RATE)
             temp_comm, _ = get_costs(get_sector(sym), sym, 1.0, 'BUY')
             units = min(cash, amount) / (exec_price * (1 + temp_comm))
             if units * exec_price < 100:
                 continue
-
             cost = units * exec_price
             comm, _ = get_costs(get_sector(sym), sym, cost, 'BUY')
             cash -= (cost + comm)
             positions[sym] = Position(sym, tomorrow, exec_price, units, get_sector(sym))
-
             # Trade log: 記錄買入
             trade_log.append({
                 'timestamp': tomorrow.strftime('%Y-%m-%d'),
@@ -402,9 +355,7 @@ def run_backtest(start_date_str, end_date_str, initial_capital_usd=None):
                 'bar_high': high.loc[tomorrow, sym] if sym in high.columns else np.nan,
                 'bar_low': low.loc[tomorrow, sym] if sym in low.columns else np.nan,
             })
-
         orders_queue = pending_orders
-
         # === 2) 盤中停損停利 (與 Live Engine 完全一致) ===
         cols_to_del = []
         curr_vix_trail = vix_series.loc[today] if not pd.isna(vix_series.loc[today]) else 20.0
@@ -420,13 +371,11 @@ def run_backtest(start_date_str, end_date_str, initial_capital_usd=None):
                 comm, tax = get_costs(pos.sector, sym, pos.units * exec_price, 'SELL')
                 gross_pnl = (exec_price - pos.entry_price) * pos.units
                 cash += (pos.units * exec_price) - comm - tax
-
                 if 'CRYPTO' in pos.sector or 'LEV' in pos.sector:
                     cooldown_dict[sym] = tomorrow + pd.Timedelta(days=1)
                 else:
                     cooldown_dict[sym] = tomorrow + pd.Timedelta(days=5)
                 cols_to_del.append(sym)
-
                 # Trade log: 盤中觸發出場
                 trade_log.append({
                     'timestamp': tomorrow.strftime('%Y-%m-%d'),
@@ -448,19 +397,15 @@ def run_backtest(start_date_str, end_date_str, initial_capital_usd=None):
                 })
         for sym in cols_to_del:
             del positions[sym]
-
         # === 3) 現金利息 (與 Live Engine 一致) ===
         if cash > 0:
             cash *= ((1 + 0.04) ** (1 / 365))
-
         # === 4) 更新 current_price (for positions not exited) ===
         for sym, pos in positions.items():
             if sym in close.columns and tomorrow in close.index and not pd.isna(close.loc[tomorrow, sym]):
                 pos.current_price = close.loc[tomorrow, sym]
-
         # === 5) 產生賣出訊號 (與 Live Engine 完全一致) ===
         curr_vix = vix_series.loc[tomorrow] if not pd.isna(vix_series.loc[tomorrow]) else 20.0
-
         holdings_to_sell = []
         for sym, pos in positions.items():
             if sym not in is_trading_day.columns or not is_trading_day.loc[tomorrow, sym]:
@@ -480,29 +425,25 @@ def run_backtest(start_date_str, end_date_str, initial_capital_usd=None):
                     orders_queue.append({'type': 'SELL', 'symbol': sym, 'reason': "Regime Fail", 'signal_date': tomorrow.strftime('%Y-%m-%d')})
                 holdings_to_sell.append(sym)
                 continue
-
         # === 6) 弒君換馬 (與 Live Engine 完全一致) ===
         active_holdings = [
             s for s in positions
             if s not in holdings_to_sell
             and not any(o['type'] == 'SELL' and o['symbol'] == s for o in orders_queue)
         ]
-
         candidates = [
             s for s in scores.loc[tomorrow].dropna().sort_values(ascending=False).index
             if s not in positions
             and check_regime(tomorrow, s, close, benchmarks_ma)
             and (s not in cooldown_dict or tomorrow > cooldown_dict[s])
+            and scores.loc[tomorrow, s] >= MIN_SCORE_THRESHOLD
         ]
-
         vix_scaler = 0.3 if curr_vix > 40 else 0.6 if curr_vix > 30 else 0.8 if curr_vix > 20 else 1.0
         total_eq = cash + sum(p.market_value for p in positions.values())
         target_pos_size = total_eq * BASE_POSITION_SIZE * vix_scaler
         proj = list(active_holdings)
-
         def is_allowed(cand):
             return True if curr_vix < 25.0 else sum(1 for x in proj if get_sector(x) == get_sector(cand)) < 2
-
         while active_holdings and candidates:
             active_holdings.sort(key=lambda x: scores.loc[tomorrow, x] if not pd.isna(scores.loc[tomorrow, x]) else -999)
             worst = active_holdings[0]
@@ -510,12 +451,10 @@ def run_backtest(start_date_str, end_date_str, initial_capital_usd=None):
             if (tomorrow - positions[worst].entry_date).days < min_hold:
                 active_holdings.pop(0)
                 continue
-
             valid_idx = next((i for i, c in enumerate(candidates) if is_allowed(c)), -1)
             if valid_idx == -1:
                 break
             best = candidates[valid_idx]
-
             w_score = scores.loc[tomorrow, worst] if not pd.isna(scores.loc[tomorrow, worst]) else 0
             b_score = scores.loc[tomorrow, best]
             v_hold = vol_20.loc[tomorrow, worst] if not pd.isna(vol_20.loc[tomorrow, worst]) else 0.0
@@ -530,14 +469,11 @@ def run_backtest(start_date_str, end_date_str, initial_capital_usd=None):
                 candidates.pop(valid_idx)
             else:
                 break
-
         # === 7) 補倉 (與 Live Engine 完全一致) ===
         current_holding_count = len(positions)
         pending_sell_count = len([o for o in orders_queue if o['type'] == 'SELL'])
         pending_buy_count = len([o for o in orders_queue if o['type'] == 'BUY'])
-
         open_slots = MAX_TOTAL_POSITIONS - (current_holding_count - pending_sell_count + pending_buy_count)
-
         for _ in range(max(0, open_slots)):
             if not candidates or curr_vix > PANIC_VIX_THRESHOLD:
                 break
@@ -547,10 +483,8 @@ def run_backtest(start_date_str, end_date_str, initial_capital_usd=None):
                 if not any(o['type'] == 'BUY' and o['symbol'] == cand for o in orders_queue):
                     orders_queue.append({'type': 'BUY', 'symbol': cand, 'amount_usd': target_pos_size, 'reason': 'NewEntry', 'signal_date': tomorrow.strftime('%Y-%m-%d')})
                 proj.append(cand)
-
         # === 8) 每日清理 ===
         orders_queue = sanitize_queue(positions, orders_queue)
-
         # === 9) 每日 equity curve ===
         pos_value = sum(p.market_value for p in positions.values())
         total_equity = cash + pos_value
@@ -562,24 +496,17 @@ def run_backtest(start_date_str, end_date_str, initial_capital_usd=None):
             'n_positions': len(positions),
             'vix': curr_vix,
         })
-
         # 進度條
         if (i + 1) % 50 == 0 or i == len(all_dates) - 1:
             print(f"   [{i+1}/{len(all_dates)}] {tomorrow.strftime('%Y-%m-%d')} | Equity: ${total_equity:,.0f} | Pos: {len(positions)} | Cash: ${cash:,.0f}")
-
     print(f"\n✅ 回測完成")
-
     # --- 轉換為 DataFrame ---
     trade_log_df = pd.DataFrame(trade_log)
     equity_df = pd.DataFrame(equity_curve)
-
     if not equity_df.empty:
         equity_df['date'] = pd.to_datetime(equity_df['date'])
         equity_df.set_index('date', inplace=True)
-
     return equity_df, trade_log_df
-
-
 # =========================
 # 6) [CR-04] Performance Report
 # =========================
@@ -588,11 +515,9 @@ def print_performance(equity_df, trade_log_df):
     if equity_df is None or equity_df.empty:
         print("❌ 無 equity 資料可供分析")
         return
-
     print("\n" + "=" * 60)
     print("📊 績效報表 (Performance Report)")
     print("=" * 60)
-
     # 基本指標
     initial_eq = equity_df['total_equity'].iloc[0]
     final_eq = equity_df['total_equity'].iloc[-1]
@@ -600,19 +525,16 @@ def print_performance(equity_df, trade_log_df):
     n_days = (equity_df.index[-1] - equity_df.index[0]).days
     n_years = n_days / 365.25 if n_days > 0 else 1
     cagr = (final_eq / initial_eq) ** (1 / n_years) - 1 if n_years > 0 else 0
-
     # Drawdown
     cum_max = equity_df['total_equity'].cummax()
     drawdown = (equity_df['total_equity'] - cum_max) / cum_max
     max_dd = drawdown.min()
     max_dd_date = drawdown.idxmin()
-
     # Daily returns
     daily_ret = equity_df['total_equity'].pct_change().dropna()
     sharpe = daily_ret.mean() / daily_ret.std() * np.sqrt(252) if daily_ret.std() > 0 else 0
     downside = daily_ret[daily_ret < 0]
     sortino = daily_ret.mean() / downside.std() * np.sqrt(252) if len(downside) > 0 and downside.std() > 0 else 0
-
     # Trade stats
     n_trades = 0
     n_wins = 0
@@ -624,9 +546,7 @@ def print_performance(equity_df, trade_log_df):
         n_wins = len(sells[sells['gross_pnl'] > 0])
         total_fees = trade_log_df['fee'].sum()
         total_tax = trade_log_df['tax'].sum()
-
     win_rate = n_wins / n_trades if n_trades > 0 else 0
-
     print(f"\n📅 回測期間: {equity_df.index[0].strftime('%Y-%m-%d')} ~ {equity_df.index[-1].strftime('%Y-%m-%d')} ({n_days} 天)")
     print(f"💰 初始資金: ${initial_eq:,.2f}")
     print(f"💰 最終資產: ${final_eq:,.2f}")
@@ -640,11 +560,9 @@ def print_performance(equity_df, trade_log_df):
     print(f"💸 總手續費: ${total_fees:,.2f}")
     print(f"💸 總交易稅: ${total_tax:,.2f}")
     print(f"💸 總成本: ${total_fees + total_tax:,.2f}")
-
     # Calmar Ratio
     calmar = cagr / abs(max_dd) if max_dd != 0 else 0
     print(f"📊 Calmar Ratio: {calmar:.2f}")
-
     return {
         'initial_equity': initial_eq, 'final_equity': final_eq,
         'total_return': total_return, 'cagr': cagr, 'max_drawdown': max_dd,
@@ -652,8 +570,6 @@ def print_performance(equity_df, trade_log_df):
         'n_trades': n_trades, 'win_rate': win_rate,
         'total_fees': total_fees, 'total_tax': total_tax,
     }
-
-
 # =========================
 # 7) [CR-05] Sector Diagnostics
 # =========================
@@ -665,17 +581,14 @@ def print_diagnostics(equity_df, trade_log_df):
     if equity_df is None or equity_df.empty:
         print("❌ 無 equity 資料可供診斷")
         return
-
     print("\n" + "=" * 60)
     print("🔬 板塊深度診斷 (Sector Diagnostics)")
     print("=" * 60)
-
     # --- 1) Top 10 / Bottom 10 by Avg Return % ---
     sells = trade_log_df[trade_log_df['side'] == 'SELL'].copy()
     if sells.empty:
         print("⚠️ 無賣出交易記錄")
         return
-
     sym_stats = sells.groupby('symbol').agg(
         n_trades=('gross_pnl', 'count'),
         total_gross_pnl=('gross_pnl', 'sum'),
@@ -686,19 +599,16 @@ def print_diagnostics(equity_df, trade_log_df):
     sym_stats['win_rate'] = sym_stats['win_count'] / sym_stats['n_trades']
     sym_stats['sector'] = sym_stats.index.map(lambda x: get_sector(x))
     sym_stats.sort_values('total_gross_pnl', ascending=False, inplace=True)
-
     print("\n🏆 Top 10 標的 (依總 Gross PnL)")
     print(f"{'Symbol':<16} {'Sector':<14} {'Trades':>6} {'Gross PnL':>12} {'Net PnL':>12} {'WinRate':>8}")
     print("-" * 70)
     for _, row in sym_stats.head(10).iterrows():
         print(f"{row.name:<16} {row['sector']:<14} {row['n_trades']:>6} ${row['total_gross_pnl']:>10,.2f} ${row['total_net_pnl']:>10,.2f} {row['win_rate']:>7.0%}")
-
     print("\n💀 Bottom 10 標的 (依總 Gross PnL)")
     print(f"{'Symbol':<16} {'Sector':<14} {'Trades':>6} {'Gross PnL':>12} {'Net PnL':>12} {'WinRate':>8}")
     print("-" * 70)
     for _, row in sym_stats.tail(10).iterrows():
         print(f"{row.name:<16} {row['sector']:<14} {row['n_trades']:>6} ${row['total_gross_pnl']:>10,.2f} ${row['total_net_pnl']:>10,.2f} {row['win_rate']:>7.0%}")
-
     # --- 板塊彙總 ---
     sector_stats = sells.groupby('market').agg(
         n_trades=('gross_pnl', 'count'),
@@ -708,21 +618,17 @@ def print_diagnostics(equity_df, trade_log_df):
     ).copy()
     sector_stats['win_rate'] = sector_stats['win_count'] / sector_stats['n_trades']
     sector_stats.sort_values('total_gross_pnl', ascending=False, inplace=True)
-
     print("\n📊 板塊彙總")
     print(f"{'Sector':<16} {'Trades':>6} {'Total PnL':>12} {'Avg PnL':>10} {'WinRate':>8}")
     print("-" * 55)
     for _, row in sector_stats.iterrows():
         print(f"{row.name:<16} {row['n_trades']:>6} ${row['total_gross_pnl']:>10,.2f} ${row['avg_gross_pnl']:>8,.2f} {row['win_rate']:>7.0%}")
-
     # --- 2) 年度報酬率 ---
     print("\n📅 年度報酬率")
     print(f"{'Year':<8} {'Return':>10} {'MaxDD':>10} {'EndEquity':>14}")
     print("-" * 45)
-
     equity_df_copy = equity_df.copy()
     equity_df_copy['year'] = equity_df_copy.index.year
-
     for year, grp in equity_df_copy.groupby('year'):
         yr_start = grp['total_equity'].iloc[0]
         yr_end = grp['total_equity'].iloc[-1]
@@ -730,27 +636,21 @@ def print_diagnostics(equity_df, trade_log_df):
         yr_cum_max = grp['total_equity'].cummax()
         yr_dd = ((grp['total_equity'] - yr_cum_max) / yr_cum_max).min()
         print(f"{year:<8} {yr_ret:>9.2%} {yr_dd:>9.2%} ${yr_end:>12,.2f}")
-
     # --- 3) 月度報酬熱力圖 (文字版) ---
     print("\n📊 月度報酬熱力圖")
-
     monthly = equity_df_copy.copy()
     monthly['month'] = monthly.index.month
     monthly['ym'] = monthly.index.to_period('M')
-
     monthly_ret = {}
     for ym, grp in monthly.groupby('ym'):
         m_start = grp['total_equity'].iloc[0]
         m_end = grp['total_equity'].iloc[-1]
         monthly_ret[(ym.year, ym.month)] = (m_end / m_start) - 1
-
     years = sorted(set(y for y, m in monthly_ret.keys()))
     months = list(range(1, 13))
-
     header = f"{'Year':<8}" + "".join(f"{'M'+str(m):>8}" for m in months) + f"{'Annual':>10}"
     print(header)
     print("-" * len(header))
-
     for year in years:
         row = f"{year:<8}"
         annual = 1.0
@@ -768,8 +668,6 @@ def print_diagnostics(equity_df, trade_log_df):
                 row += f"{'---':>8}"
         row += f"{annual - 1:>9.1%}"
         print(row)
-
-
 # =========================
 # 8) Main Entry Point
 # =========================
@@ -778,22 +676,17 @@ if __name__ == "__main__":
     START_DATE = '2021-11-01'
     END_DATE = '2026-02-26'
     INITIAL_CAPITAL_USD = 100000.0 / USD_TWD_RATE  # 與 Live Engine 一致
-
     # 執行回測
     equity_df, trade_log_df = run_backtest(START_DATE, END_DATE, INITIAL_CAPITAL_USD)
-
     if equity_df is not None and not equity_df.empty:
         # 績效報表
         perf = print_performance(equity_df, trade_log_df)
-
         # 板塊診斷
         print_diagnostics(equity_df, trade_log_df)
-
         # 輸出 trade log CSV
         if trade_log_df is not None and not trade_log_df.empty:
             trade_log_df.to_csv('trade_log.csv', index=False)
             print(f"\n📁 Trade log 已儲存: trade_log.csv ({len(trade_log_df)} 筆)")
-
         # 輸出 equity curve CSV
         equity_df.to_csv('equity_curve.csv')
         print(f"📁 Equity curve 已儲存: equity_curve.csv ({len(equity_df)} 筆)")
