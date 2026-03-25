@@ -94,10 +94,17 @@ ASSET_MAP = {
     '3035.TW': 'TW_STOCK',
     # [CR-08] 6531.TW 移除
     '3324.TWO': 'TW_STOCK',
-    # --- V18.03 台股妖股擴展 (回測驗證 CAGR+32%, MaxDD-5%) ---
-    '3443.TW': 'TW_STOCK',   # 創意 (ASIC, 67%勝率)
-    '2383.TW': 'TW_STOCK',   # 台光電 (CCL, 75%勝率)
-    '3037.TW': 'TW_STOCK',   # 欣興 (ABF載板, 75%勝率)
+    # --- V18.03 台股擴展 (5輪回測驗證, 全部正貢獻) ---
+    '3443.TW': 'TW_STOCK',   # 創意 (ASIC)
+    '2383.TW': 'TW_STOCK',   # 台光電 (CCL)
+    '3037.TW': 'TW_STOCK',   # 欣興 (ABF載板)
+    '2345.TW': 'TW_STOCK',   # 智邦 (AI網通)
+    '2327.TW': 'TW_STOCK',   # 國巨 (MLCC)
+    '2059.TW': 'TW_STOCK',   # 川湖 (伺服器滑軌)
+    '2404.TW': 'TW_STOCK',   # 漢唐 (無塵室)
+    '3005.TW': 'TW_STOCK',   # 神基 (強固電腦)
+    '6285.TW': 'TW_STOCK',   # 啟碁 (AI網通設備)
+    '6515.TW': 'TW_STOCK',   # 穎崴 (探針卡)
     # --- V18.01 新增標的 (回測驗證 +6% 報酬) ---
     'MSTR': 'US_GROWTH', 'COIN': 'US_GROWTH', 'MARA': 'US_GROWTH',
     'SMCI': 'US_GROWTH', 'AXON': 'US_GROWTH',
@@ -107,6 +114,17 @@ ASSET_MAP = {
     'NVDA': 'US_GROWTH', 'TSLA': 'US_GROWTH', 'META': 'US_GROWTH',
     'AVGO': 'US_GROWTH', 'AMD': 'US_GROWTH',
     'SHOP': 'US_GROWTH', 'NET': 'US_GROWTH', 'ANET': 'US_GROWTH',
+    # --- V18.04 美股擴展 (回測驗證 CAGR+39pp, MaxDD改善) ---
+    'TMDX': 'US_GROWTH',   # TransMedics (器官運輸)
+    'LLY': 'US_STOCK',     # Eli Lilly (GLP-1)
+    'HIMS': 'US_GROWTH',   # Hims (遠距醫療)
+    'RDDT': 'US_GROWTH',   # Reddit (社群)
+    'CYBR': 'US_GROWTH',   # CyberArk (網安)
+    'GOOG': 'US_STOCK',    # Google
+    'UBER': 'US_GROWTH',   # Uber (出行)
+    'SPOT': 'US_GROWTH',   # Spotify (串流)
+    'FTNT': 'US_GROWTH',   # Fortinet (網安)
+    'NU': 'US_GROWTH',     # Nu Holdings (FinTech)
 }
 TIER_1_ASSETS = [
     # [BUG-02] 修正 ticker 與 ASSET_MAP 一致
@@ -198,16 +216,18 @@ def get_data(start_date=None):
         open_, high, low = close.copy(), close.copy(), close.copy()
     is_trading_day = ~raw_close.isna()
     twd_series = close['TWD=X'].ffill().bfill() if 'TWD=X' in close.columns else pd.Series(USD_TWD_RATE, index=close.index)
+    # [FIX_11] 保留台股原始台幣 High，供 FIX_10 精確更新 max_price_twd
+    raw_high_twd = high.copy()
     for col in close.columns:
         if '.TW' in col or '.TWO' in col:
             close[col] /= twd_series; open_[col] /= twd_series
             high[col]  /= twd_series; low[col]   /= twd_series
     cols_to_drop = [c for c in close.columns if c == 'TWD=X']
     if cols_to_drop:
-        for df in [close, open_, high, low, is_trading_day]: df.drop(columns=cols_to_drop, inplace=True)
+        for df in [close, open_, high, low, is_trading_day, raw_high_twd]: df.drop(columns=cols_to_drop, inplace=True)
         
-    # [FIX_09] 回傳 twd_series 供顯示換算使用
-    return close, open_, high, low, is_trading_day, twd_series
+    # [FIX_09] 回傳 twd_series + raw_high_twd 供顯示換算使用
+    return close, open_, high, low, is_trading_day, twd_series, raw_high_twd
 def get_sector(sym): return ASSET_MAP.get(sym, 'US_STOCK')
 def get_costs(sector, sym, gross_amount, action):
     comm = gross_amount * RATES.get(f"{sector.split('_')[0]}_COMM", RATES['US_COMM'])
@@ -257,7 +277,7 @@ def run_live(dry_run=False):
         if min_entry < earliest_entry:
             earliest_entry = min_entry - pd.Timedelta(days=5) # 提早5天策安全
             
-    close, open_, high, low, is_trading_day, twd_series = get_data(start_date=earliest_entry)
+    close, open_, high, low, is_trading_day, twd_series, raw_high_twd = get_data(start_date=earliest_entry)
     # 抓取最新匯率供介面顯示
     latest_twd_rate = twd_series.iloc[-1] if not twd_series.empty else USD_TWD_RATE
     today_utc = datetime.utcnow().date()
@@ -276,9 +296,11 @@ def run_live(dry_run=False):
                     real_max = hist_highs.max()
                     if pd.notna(real_max) and real_max > pos.max_price:
                         pos.max_price = real_max
-                        # 台股同步更新 max_price_twd (USD→TWD)
-                        if 'TW' in pos.sector:
-                            pos.max_price_twd = real_max * latest_twd_rate
+                        # [FIX_11] 台股：用原始台幣 High 精確更新，不經匯率來回轉換
+                        if 'TW' in pos.sector and sym in raw_high_twd.columns:
+                            twd_highs = raw_high_twd.loc[mask, sym]
+                            if not twd_highs.empty:
+                                pos.max_price_twd = float(twd_highs.max())
             except Exception as e:
                 print(f"⚠️ {sym} 最高價修復失敗: {e}")
                 
