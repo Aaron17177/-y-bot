@@ -142,12 +142,15 @@ ASSET_MAP = {
 }
 
 TIER_1_ASSETS = [
-    # [BUG-02] 修正 ticker 與 ASSET_MAP 一致
-    'RGTI', 'QUBT', 'ASTS', 'ASTX', 'IONX', 'IONQ', 'RKLB', 'RKLX',
-    'VST', 'BE', 'BTC-USD', 'ETH-USD', 'BONK-USD', 'DOGE-USD',
-    'LUNR', 'SNDK', 'AGQ', 'ALAB', 'PLTR',
-    'MSTR', 'COIN',  # V18.01 新增
-    'NVDA', 'TSLA', 'META', 'AVGO',  # V18.02
+    # --- 核心降維：回歸第一性原理的 TIER_1 ---
+    # 爆發力妖股：
+    'RGTI', 'QUBT', 'ASTS', 'IONQ', 'RKLB', 'VST', 'SNDK', 'ALAB', 'PLTR',
+    # 幣圈王者：
+    'BTC-USD', 'ETH-USD', 'BONK-USD', 'DOGE-USD',
+    # AI/科技巨頭 (信仰加權)：
+    'NVDA', 'TSLA', 'META', 'AVGO', 'AMD', 'PANW',
+    # 戰略資產/特許經營：
+    'MSTR', 'COIN', 'AXON'
 ]
 
 ALL_TICKERS = list(set(list(ASSET_MAP.keys()) + ['SPY', 'QQQ', 'BTC-USD', '^TWII', '^HSI', '^VIX', 'TWD=X']))
