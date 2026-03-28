@@ -85,17 +85,17 @@ ASSET_MAP = {
     'ASTX': 'LEV_2X','GGLL':'US_GROWTH',
     'HOOX': 'LEV_2X', 'IONX': 'LEV_2X', 'OKLL': 'LEV_2X', 'RKLX': 'LEV_2X',
     'LUNR': 'US_GROWTH', 'QUBT': 'US_GROWTH',
-    'PLTR': 'US_GROWTH', 'CRWD': 'US_GROWTH', 'PANW': 'US_GROWTH',
+    'PLTR': 'US_GROWTH', 'CRWD': 'US_STOCK', 'PANW': 'US_GROWTH',  # [V18.06] 重分類
     
 
-    'APP': 'US_GROWTH','BE':'US_GROWTH','ISRG':'US_GROWTH',
-    'CRCL': 'US_GROWTH','MU':'US_STOCK','SNDK':'US_STOCK',
+    'APP': 'US_GROWTH','BE':'US_STOCK','ISRG':'US_GROWTH',  # [V18.06] 重分類
+    'CRCL': 'US_GROWTH','MU':'US_GROWTH','SNDK':'US_STOCK',  # [V18.06] 重分類
 
     'LEU': 'US_GROWTH',  # [BUG-03] 移除重複 'BE' key
 
-    'IONQ': 'US_GROWTH', 'RGTI': 'US_GROWTH', 'RKLB': 'US_GROWTH', 'VRT': 'US_GROWTH',
+    'IONQ': 'US_STOCK', 'RGTI': 'US_GROWTH', 'RKLB': 'US_GROWTH', 'VRT': 'US_GROWTH',  # [V18.06] 重分類
     'VST': 'US_GROWTH', 'ASTS': 'US_GROWTH', 'OKLO': 'US_GROWTH',
-    'HOOD': 'US_GROWTH', 'SERV': 'US_GROWTH',
+    'HOOD': 'US_GROWTH', 'SERV': 'US_STOCK',  # [V18.06] 重分類
     'GLD': 'US_STOCK','GLW': 'US_STOCK',
     # === A/B Test 倖存者保留 ===
     # [CR-08] UGL 移除; [CR-06] PENDLE-USD 移除
@@ -120,14 +120,14 @@ ASSET_MAP = {
     '6285.TW': 'TW_STOCK',   # 啟碁 (AI網通設備)
     '6515.TW': 'TW_STOCK',   # 穎崴 (探針卡)
     # --- V18.01 新增標的 (回測驗證 +6% 報酬) ---
-    'MSTR': 'US_GROWTH', 'COIN': 'US_GROWTH', 'MARA': 'US_GROWTH',
+    'MSTR': 'US_GROWTH', 'COIN': 'US_GROWTH', 'MARA': 'US_STOCK',  # [V18.06] 重分類
     'SMCI': 'US_GROWTH', 'AXON': 'US_GROWTH',
     '00670L.TW': 'TW_STOCK', '00757.TW': 'TW_STOCK',
     'XRP-USD': 'CRYPTO_SPOT', 'SUI20947-USD': 'CRYPTO_MEME',
     # --- V18.02 擴大標的池 ---
     'NVDA': 'US_GROWTH', 'TSLA': 'US_GROWTH', 'META': 'US_GROWTH',
     'AVGO': 'US_GROWTH', 'AMD': 'US_GROWTH',
-    'SHOP': 'US_GROWTH', 'NET': 'US_GROWTH', 'ANET': 'US_GROWTH',
+    'SHOP': 'US_GROWTH', 'NET': 'US_STOCK', 'ANET': 'US_GROWTH',  # [V18.06] 重分類
     # --- V18.04 美股擴展 (回測驗證 CAGR+39pp, MaxDD改善) ---
     'TMDX': 'US_GROWTH',   # TransMedics (器官運輸)
     'LLY': 'US_STOCK',     # Eli Lilly (GLP-1)
