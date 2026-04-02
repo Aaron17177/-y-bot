@@ -1,39 +1,7 @@
 {
-    "cash": 1251.727096353136,
-    "positions": {
-        "3529.TWO": {
-            "symbol": "3529.TWO",
-            "entry_date": "2026-03-12",
-            "entry_price": 76.37171742464552,
-            "units": 1.0,
-            "sector": "TW_STOCK",
-            "max_price": 93.32331435700989,
-            "current_price": 82.08745216001464,
-            "max_price_twd": 2980.0
-        },
-        "6739.TWO": {
-            "symbol": "6739.TWO",
-            "entry_date": "2026-03-04",
-            "entry_price": 28.795893455194214,
-            "units": 1.0,
-            "sector": "TW_STOCK",
-            "max_price": 41.337843943373514,
-            "current_price": 34.48921469080462,
-            "max_price_twd": 1320.0
-        }
-    },
-    "orders_queue": [
-        {
-            "type": "SELL",
-            "symbol": "3529.TWO",
-            "reason": "Regime Fail"
-        },
-        {
-            "type": "SELL",
-            "symbol": "6739.TWO",
-            "reason": "Regime Fail"
-        }
-    ],
+    "cash": 1374.7402555009894,
+    "positions": {},
+    "orders_queue": [],
     "cooldown_dict": {},
-    "last_processed_date": "2026-03-31"
+    "last_processed_date": "2026-04-01"
 }
