@@ -1,7 +1,23 @@
 {
-    "cash": 1375.7746939522099,
+    "cash": 1375.9225344009415,
     "positions": {},
-    "orders_queue": [],
+    "orders_queue": [
+        {
+            "type": "BUY",
+            "symbol": "6285.TW",
+            "amount_usd": 550.309877580884
+        },
+        {
+            "type": "BUY",
+            "symbol": "6739.TWO",
+            "amount_usd": 550.309877580884
+        },
+        {
+            "type": "BUY",
+            "symbol": "3037.TW",
+            "amount_usd": 550.309877580884
+        }
+    ],
     "cooldown_dict": {},
-    "last_processed_date": "2026-04-08"
+    "last_processed_date": "2026-04-09"
 }
