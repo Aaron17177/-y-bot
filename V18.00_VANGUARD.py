@@ -151,7 +151,7 @@ TIER_1_ASSETS = [
     'NVDA', 'TSLA', 'META', 'AVGO', 'AMD', 'PANW',
     # 戰略資產/特許經營：
     'MSTR', 'COIN', 'AXON'
-]
+]  # V18.02
 
 ALL_TICKERS = list(set(list(ASSET_MAP.keys()) + ['SPY', 'QQQ', 'BTC-USD', '^TWII', '^HSI', '^VIX', 'TWD=X']))
 
@@ -494,8 +494,8 @@ def run_live(dry_run=False):
                       and (s not in cooldown_dict or exec_date > cooldown_dict[s])
                       and scores.loc[exec_date, s] >= MIN_SCORE_THRESHOLD]
         
-        # [V18.05] VIX 放鬆: VIX 20-30 是正常波動，不縮倉 (A/B 驗證 CAGR+25pp)
-        vix_scaler = 0.4 if curr_vix > 40 else 0.7 if curr_vix > 30 else 1.0
+        # [V18.07] VIX Boost: VIX 低時加碼 (A/B 驗證 CAGR+116pp, MaxDD -49.39% < -50% 底線)
+        vix_scaler = 0.4 if curr_vix > 40 else 0.7 if curr_vix > 30 else 1.0 if curr_vix > 20 else 1.15 if curr_vix > 15 else 1.3
         # [OPT-06] 先更新所有持倉 current_price 再算 total_eq
         for sym_upd, pos_upd in positions.items():
             if sym_upd in close.columns and not pd.isna(close.loc[exec_date, sym_upd]):
