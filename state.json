@@ -7,9 +7,9 @@
             "entry_price": 7.248282204393876,
             "units": 75.89900530770089,
             "sector": "TW_STOCK",
-            "max_price": 7.822110096097765,
-            "current_price": 7.107779886513061,
-            "max_price_twd": 248.0
+            "max_price": 7.956886967599864,
+            "current_price": 7.80684353106687,
+            "max_price_twd": 251.0
         },
         "6739.TWO": {
             "symbol": "6739.TWO",
@@ -17,9 +17,9 @@
             "entry_price": 47.69022278272223,
             "units": 11.535643521932025,
             "sector": "TW_STOCK",
-            "max_price": 48.73048426802841,
-            "current_price": 46.80733095996406,
-            "max_price_twd": 1545.0
+            "max_price": 49.136154580795974,
+            "current_price": 47.53360375770554,
+            "max_price_twd": 1550.0
         },
         "3037.TW": {
             "symbol": "3037.TW",
@@ -28,11 +28,11 @@
             "units": 13.594524829986282,
             "sector": "TW_STOCK",
             "max_price": 20.803258204428474,
-            "current_price": 20.109816264280855,
+            "current_price": 19.705984074386535,
             "max_price_twd": 660.0
         }
     },
     "orders_queue": [],
     "cooldown_dict": {},
-    "last_processed_date": "2026-04-12"
+    "last_processed_date": "2026-04-13"
 }
