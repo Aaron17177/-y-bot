@@ -1,49 +1,41 @@
 {
     "cash": 0.0,
     "positions": {
-        "6285.TW": {
-            "symbol": "6285.TW",
-            "entry_date": "2026-04-10",
-            "entry_price": 7.248282204393876,
-            "units": 75.89900530770089,
-            "sector": "TW_STOCK",
-            "max_price": 7.956886967599864,
-            "current_price": 7.079377719142225,
-            "max_price_twd": 251.0
-        },
         "6739.TWO": {
             "symbol": "6739.TWO",
-            "entry_date": "2026-04-10",
-            "entry_price": 47.69022278272223,
-            "units": 11.535643521932025,
+            "entry_date": "2026-04-13",
+            "entry_price": 48.1622,
+            "units": 1,
             "sector": "TW_STOCK",
-            "max_price": 51.481069935249245,
-            "current_price": 46.774459930046845,
+            "max_price": 51.4893,
+            "current_price": 51.4893,
+            "entry_price_twd": 1520.0,
             "max_price_twd": 1625.0
+        },
+        "6285.TW": {
+            "symbol": "6285.TW",
+            "entry_date": "2026-04-13",
+            "entry_price": 7.4937,
+            "units": 1,
+            "sector": "TW_STOCK",
+            "max_price": 7.6996,
+            "current_price": 7.6996,
+            "entry_price_twd": 236.5,
+            "max_price_twd": 243.0
         },
         "3037.TW": {
             "symbol": "3037.TW",
-            "entry_date": "2026-04-10",
-            "entry_price": 20.24465748591056,
-            "units": 13.594524829986282,
+            "entry_date": "2026-04-13",
+            "entry_price": 20.2155,
+            "units": 1,
             "sector": "TW_STOCK",
-            "max_price": 20.803258204428474,
-            "current_price": 18.867805796106733,
-            "max_price_twd": 660.0
+            "max_price": 20.2155,
+            "current_price": 20.2155,
+            "entry_price_twd": 638.0,
+            "max_price_twd": 638.0
         }
     },
-    "orders_queue": [
-        {
-            "type": "SELL",
-            "symbol": "3037.TW",
-            "reason": "Swap to 8996.TW"
-        },
-        {
-            "type": "BUY",
-            "symbol": "8996.TW",
-            "amount_usd": 613.359435487547
-        }
-    ],
+    "orders_queue": [],
     "cooldown_dict": {},
-    "last_processed_date": "2026-04-14"
+    "last_processed_date": "2026-04-13"
 }
