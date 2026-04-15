@@ -693,6 +693,15 @@ def run_live(dry_run=False):
             final_price = max(hard_price, trail_price)
             pct_str = str(int(cur_trail_pct * 100)) if use_trail else str(int(stop_pct * 100))
             profit_str = str(int(profit_ratio * 100))
+            # NaN guard: yfinance 下載失敗時 entry/max price 可能為 NaN，跳過該檔避免 int(NaN) crash
+            def _bad(v):
+                try:
+                    return v is None or (isinstance(v, float) and np.isnan(v))
+                except Exception:
+                    return True
+            if _bad(p.entry_price) or _bad(p.max_price) or _bad(final_price):
+                msg += "\u26a0\ufe0f " + sym + " \u8cc7\u6599\u66ab\u6642\u6293\u4e0d\u5230\uff0c\u7565\u904e\u672c\u8f2a\n"
+                continue
             if 'TW' in p.sector:
                 # 台股：優先用 entry_price_twd (精確台幣)，沒有才 fallback 匯率換算
                 if p.entry_price_twd is not None:
@@ -704,6 +713,9 @@ def run_live(dry_run=False):
                     entry_ntd = p.entry_price * latest_twd_rate
                     max_ntd = p.max_price * latest_twd_rate
                     final_ntd = final_price * latest_twd_rate
+                if _bad(entry_ntd) or _bad(max_ntd) or _bad(final_ntd):
+                    msg += "\u26a0\ufe0f " + sym + " \u53f0\u5e63\u50f9\u683c\u8cc7\u6599\u7f3a\u5931\uff0c\u7565\u904e\u672c\u8f2a\n"
+                    continue
                 msg += "\U0001F4CC " + sym + " (\u53e3\u888b\u8b49\u5238)\n"
                 msg += "   \u6210\u4ea4: NT$" + str(int(entry_ntd)) + " | \u6700\u9ad8: NT$" + str(int(max_ntd)) + "\n"
                 if use_trail:
