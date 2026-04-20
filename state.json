@@ -23,30 +23,19 @@
             "entry_price_twd": 236.5,
             "max_price_twd": 274.5
         },
-        "3037.TW": {
-            "symbol": "3037.TW",
-            "entry_date": "2026-04-13",
-            "entry_price": 20.2155,
+        "3529.TWO": {
+            "symbol": "3529.TWO",
+            "entry_date": "2026-04-20",
+            "entry_price": 128.1271,
             "units": 1.0,
             "sector": "TW_STOCK",
-            "max_price": 20.51722474678805,
-            "current_price": 20.436053446982147,
-            "entry_price_twd": 638.0,
-            "max_price_twd": 648.0
+            "max_price": 128.1271,
+            "current_price": 128.1271,
+            "entry_price_twd": 4035.0,
+            "max_price_twd": 4035.0
         }
     },
-    "orders_queue": [
-        {
-            "type": "SELL",
-            "symbol": "3037.TW",
-            "reason": "Swap to 3529.TWO"
-        },
-        {
-            "type": "BUY",
-            "symbol": "3529.TWO",
-            "amount_usd": 36.0745605987513
-        }
-    ],
+    "orders_queue": [],
     "cooldown_dict": {},
     "last_processed_date": "2026-04-18"
 }
