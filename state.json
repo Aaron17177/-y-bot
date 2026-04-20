@@ -29,10 +29,10 @@
             "entry_price": 128.1271,
             "units": 1.0,
             "sector": "TW_STOCK",
-            "max_price": 128.1271,
+            "max_price": 129.340440960399,
             "current_price": 128.1271,
             "entry_price_twd": 4035.0,
-            "max_price_twd": 4035.0
+            "max_price_twd": 4075.0
         }
     },
     "orders_queue": [],
