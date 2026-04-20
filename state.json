@@ -8,7 +8,7 @@
             "units": 1.0,
             "sector": "TW_STOCK",
             "max_price": 52.86985169997497,
-            "current_price": 49.58047181538437,
+            "current_price": 49.432789533287064,
             "entry_price_twd": 1520.0,
             "max_price_twd": 1670.0
         },
@@ -19,7 +19,7 @@
             "units": 1.0,
             "sector": "TW_STOCK",
             "max_price": 8.731749136423751,
-            "current_price": 8.406432561005875,
+            "current_price": 8.381392840740018,
             "entry_price_twd": 236.5,
             "max_price_twd": 274.5
         },
@@ -29,13 +29,13 @@
             "entry_price": 128.1271,
             "units": 1.0,
             "sector": "TW_STOCK",
-            "max_price": 129.340440960399,
-            "current_price": 128.1271,
+            "max_price": 141.1142627185791,
+            "current_price": 129.12731881291333,
             "entry_price_twd": 4035.0,
-            "max_price_twd": 4075.0
+            "max_price_twd": 4430.0
         }
     },
     "orders_queue": [],
     "cooldown_dict": {},
-    "last_processed_date": "2026-04-18"
+    "last_processed_date": "2026-04-19"
 }
