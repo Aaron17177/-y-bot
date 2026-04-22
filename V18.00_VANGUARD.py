@@ -272,6 +272,23 @@ def get_costs(sector, sym, gross_amount, action):
     tax = gross_amount * (RATES['TW_TAX_ETF'] if sym.startswith('00') else RATES['TW_TAX_STOCK']) if action == 'SELL' and 'TW' in sector else 0.0
     return comm, tax
 
+# [BROKER_LOG] 旁路記錄 — 每筆 BUY/SELL 成交寫一行到 broker_trades.csv，失敗不影響主邏輯
+BROKER_TRADES_CSV = 'broker_trades.csv'
+BROKER_TRADES_HEADER = "timestamp,symbol,side,qty,signal_price,fill_price,slippage_pct,reason,sector\n"
+
+def log_broker_trade(symbol, side, qty, signal_price, fill_price, reason, sector):
+    try:
+        timestamp = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        slip_pct = (fill_price / signal_price - 1.0) * 100.0 if signal_price else 0.0
+        row = f"{timestamp},{symbol},{side},{qty:.6f},{signal_price:.6f},{fill_price:.6f},{slip_pct:+.4f},{reason},{sector}\n"
+        write_header = not os.path.exists(BROKER_TRADES_CSV)
+        with open(BROKER_TRADES_CSV, 'a') as f:
+            if write_header:
+                f.write(BROKER_TRADES_HEADER)
+            f.write(row)
+    except Exception as e:
+        print(f"⚠️ log_broker_trade failed for {symbol} {side}: {e}")
+
 def check_regime(date, sym, close_df, benchmarks_ma):
     sector = get_sector(sym)
     bench = 'BTC-USD' if 'CRYPTO' in sector else '^TWII' if 'TW_' in sector else '^HSI' if 'CN_' in sector else 'QQQ'
@@ -418,6 +435,12 @@ def run_live(dry_run=False):
             exec_price = open_.loc[exec_date, sym] * (1 - SLIPPAGE_RATE)
             comm, tax = get_costs(positions[sym].sector, sym, positions[sym].units * exec_price, 'SELL')
             cash += (positions[sym].units * exec_price) - comm - tax
+            # [BROKER_LOG] 排隊 SELL 成交記錄
+            log_broker_trade(
+                symbol=sym, side='SELL', qty=positions[sym].units,
+                signal_price=float(open_.loc[exec_date, sym]), fill_price=float(exec_price),
+                reason=o.get('reason', 'SELL_QUEUED'), sector=positions[sym].sector,
+            )
             del positions[sym]
 
         for o in buy_orders:
@@ -445,6 +468,12 @@ def run_live(dry_run=False):
             comm, _ = get_costs(get_sector(sym), sym, cost, 'BUY')
             cash -= (cost + comm)
             positions[sym] = Position(sym, exec_date, exec_price, units, get_sector(sym))
+            # [BROKER_LOG] 排隊 BUY 成交記錄
+            log_broker_trade(
+                symbol=sym, side='BUY', qty=units,
+                signal_price=float(open_.loc[exec_date, sym]), fill_price=float(exec_price),
+                reason=o.get('reason', 'BUY_QUEUED'), sector=get_sector(sym),
+            )
 
         orders_queue = pending_orders
 
@@ -455,11 +484,18 @@ def run_live(dry_run=False):
             pos.current_price = close.loc[exec_date, sym]
             triggered, exec_price, reason = pos.check_intraday_exit(open_.loc[exec_date, sym], high.loc[exec_date, sym], low.loc[exec_date, sym], curr_vix_trail)
             if triggered:
+                signal_exec_price = exec_price  # [BROKER_LOG] 捕捉 pre-slippage 觸發價
                 exec_price *= (1 - SLIPPAGE_RATE)
                 comm, tax = get_costs(pos.sector, sym, pos.units * exec_price, 'SELL')
                 cash += (pos.units * exec_price) - comm - tax
                 if 'CRYPTO' in pos.sector or 'LEV' in pos.sector: cooldown_dict[sym] = exec_date + pd.Timedelta(days=1)
                 else: cooldown_dict[sym] = exec_date + pd.Timedelta(days=5)
+                # [BROKER_LOG] 盤中觸發出場記錄（TRAIL_EXIT/HARD_STOP/GAP_* 等）
+                log_broker_trade(
+                    symbol=sym, side='SELL', qty=pos.units,
+                    signal_price=float(signal_exec_price), fill_price=float(exec_price),
+                    reason=reason, sector=pos.sector,
+                )
                 cols_to_del.append(sym)
                 if date == dates_to_process[-1]: intraday_alerts.append(f"⚠️ {sym} 於 {exec_date.strftime('%m/%d')} 盤中觸發: {reason}")
         for sym in cols_to_del: del positions[sym]
