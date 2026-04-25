@@ -1,17 +1,6 @@
 {
-    "cash": 51.847407150133755,
+    "cash": 58.6995247722351,
     "positions": {
-        "6285.TW": {
-            "symbol": "6285.TW",
-            "entry_date": "2026-04-13",
-            "entry_price": 7.4937,
-            "units": 1.0,
-            "sector": "TW_STOCK",
-            "max_price": 8.731749136423751,
-            "current_price": 6.91204683135178,
-            "entry_price_twd": 236.5,
-            "max_price_twd": 274.5
-        },
         "3529.TWO": {
             "symbol": "3529.TWO",
             "entry_date": "2026-04-20",
@@ -19,28 +8,23 @@
             "units": 1.0,
             "sector": "TW_STOCK",
             "max_price": 145.46727612453185,
-            "current_price": 126.48251213232223,
+            "current_price": 123.69171947566244,
             "entry_price_twd": 4035.0,
             "max_price_twd": 4570.0
         }
     },
     "orders_queue": [
         {
-            "type": "SELL",
-            "symbol": "6285.TW",
-            "reason": "Zombie"
-        },
-        {
             "type": "BUY",
             "symbol": "3443.TW",
-            "amount_usd": 63.906556344478076
+            "amount_usd": 62.92280329519662
         },
         {
             "type": "BUY",
-            "symbol": "6515.TW",
-            "amount_usd": 63.906556344478076
+            "symbol": "2383.TW",
+            "amount_usd": 62.92280329519662
         }
     ],
     "cooldown_dict": {},
-    "last_processed_date": "2026-04-23"
+    "last_processed_date": "2026-04-24"
 }
