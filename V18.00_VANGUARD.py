@@ -779,17 +779,20 @@ def run_live(dry_run=False):
     # [ALLOC_CHECK] \u5009\u4f4d\u914d\u7f6e\u6aa2\u67e5\uff08\u4f9d\u52d5\u80fd\u6392\u540d\u6a19\u76ee\u6a19\u4f54\u6bd4 + \u5be6\u969b\u4f54\u6bd4 + \u504f\u96e2\u5ea6\uff09
     if positions and total_eq > 0:
         try:
+            # \u7528\u6700\u65b0\u4ea4\u6613\u65e5 + \u91cd\u7b97 vix_scaler\uff08\u907f\u514d exec_date/vix_scaler \u672a\u5b9a\u7fa9\uff09
+            latest_score_date = close.index[-1]
+            _vs = 0.4 if latest_vix > 40 else 0.7 if latest_vix > 30 else 1.0 if latest_vix > 20 else 1.15 if latest_vix > 15 else 1.3
             ranked = []
             for sym_r, p_r in positions.items():
-                sc = scores.loc[exec_date, sym_r] if sym_r in scores.columns else np.nan
+                sc = scores.loc[latest_score_date, sym_r] if (sym_r in scores.columns and latest_score_date in scores.index) else np.nan
                 ranked.append((sym_r, p_r, sc if not pd.isna(sc) else -999))
             ranked.sort(key=lambda x: x[2], reverse=True)
             medals = ["\U0001F947", "\U0001F948", "\U0001F949"]  # \ud83e\udd47\ud83e\udd48\ud83e\udd49
             msg += "\n\U0001F4CA \u3010\u5009\u4f4d\u914d\u7f6e\u6aa2\u67e5\u3011(\u4f9d\u52d5\u80fd\u6392\u540d)\n"
-            msg += f"   VIX \u52a0\u78bc: {vix_scaler:.2f}x\n"
+            msg += f"   VIX \u52a0\u78bc: {_vs:.2f}x\n"
             for idx, (sym_r, p_r, _) in enumerate(ranked):
                 base_target = 0.40 if idx == 0 else 0.30
-                target_with_vix = base_target * vix_scaler * 100
+                target_with_vix = base_target * _vs * 100
                 actual_pct = (p_r.market_value / total_eq) * 100 if total_eq > 0 else 0
                 deviation = actual_pct - target_with_vix
                 medal = medals[idx] if idx < 3 else "\u2796"
