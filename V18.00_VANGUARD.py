@@ -776,6 +776,29 @@ def run_live(dry_run=False):
                 else:
                     msg += "   \u8ffd\u8e64\u5024: " + pct_str + "%  \u89f8\u767c\u50f9: \u2705$" + ("%.2f" % final_price) + "\n"
 
+    # [ALLOC_CHECK] \u5009\u4f4d\u914d\u7f6e\u6aa2\u67e5\uff08\u4f9d\u52d5\u80fd\u6392\u540d\u6a19\u76ee\u6a19\u4f54\u6bd4 + \u5be6\u969b\u4f54\u6bd4 + \u504f\u96e2\u5ea6\uff09
+    if positions and total_eq > 0:
+        try:
+            ranked = []
+            for sym_r, p_r in positions.items():
+                sc = scores.loc[exec_date, sym_r] if sym_r in scores.columns else np.nan
+                ranked.append((sym_r, p_r, sc if not pd.isna(sc) else -999))
+            ranked.sort(key=lambda x: x[2], reverse=True)
+            medals = ["\U0001F947", "\U0001F948", "\U0001F949"]  # \ud83e\udd47\ud83e\udd48\ud83e\udd49
+            msg += "\n\U0001F4CA \u3010\u5009\u4f4d\u914d\u7f6e\u6aa2\u67e5\u3011(\u4f9d\u52d5\u80fd\u6392\u540d)\n"
+            msg += f"   VIX \u52a0\u78bc: {vix_scaler:.2f}x\n"
+            for idx, (sym_r, p_r, _) in enumerate(ranked):
+                base_target = 0.40 if idx == 0 else 0.30
+                target_with_vix = base_target * vix_scaler * 100
+                actual_pct = (p_r.market_value / total_eq) * 100 if total_eq > 0 else 0
+                deviation = actual_pct - target_with_vix
+                medal = medals[idx] if idx < 3 else "\u2796"
+                dev_icon = "\U0001F7E2" if abs(deviation) < 5 else ("\U0001F7E1" if abs(deviation) < 10 else "\U0001F534")
+                msg += f"{medal} #{idx+1} {sym_r}\n"
+                msg += f"   \u76ee\u6a19: {int(round(target_with_vix))}% | \u5be6\u969b: {int(round(actual_pct))}% | {dev_icon} \u504f\u96e2: {deviation:+.1f}pp\n"
+        except Exception as e:
+            msg += f"\n\u26a0\ufe0f \u5009\u4f4d\u914d\u7f6e\u6aa2\u67e5\u5931\u6557: {e}\n"
+
     if not sells and not buys:
         msg += "\u2615 \u4eca\u65e5\u7121\u63db\u5009\u52d5\u4f5c\uff0c\u7dad\u6301\u9632\u7a7e\u639b\u55ae\u5373\u53ef"
 
