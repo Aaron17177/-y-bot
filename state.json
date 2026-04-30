@@ -1,5 +1,5 @@
 {
-    "cash": 58.72476019210858,
+    "cash": 58.73107074203847,
     "positions": {
         "3529.TWO": {
             "symbol": "3529.TWO",
@@ -8,7 +8,7 @@
             "units": 1.0,
             "sector": "TW_STOCK",
             "max_price": 145.46727612453185,
-            "current_price": 126.68610172566491,
+            "current_price": 123.75844697651988,
             "entry_price_twd": 4035.0,
             "max_price_twd": 4570.0
         },
@@ -18,10 +18,10 @@
             "entry_price": 130.3035,
             "units": 1.0,
             "sector": "TW_STOCK",
-            "max_price": 134.9516943100245,
-            "current_price": 133.20320357102534,
+            "max_price": 137.75413648469683,
+            "current_price": 130.7396927034005,
             "entry_price_twd": 4100.0,
-            "max_price_twd": 4245.0
+            "max_price_twd": 4350.0
         },
         "2383.TW": {
             "symbol": "2383.TW",
@@ -30,12 +30,23 @@
             "units": 1.0,
             "sector": "TW_STOCK",
             "max_price": 152.86624389534535,
-            "current_price": 139.08449060220426,
+            "current_price": 140.89423194249954,
             "entry_price_twd": 4480.0,
             "max_price_twd": 4800.0
         }
     },
-    "orders_queue": [],
+    "orders_queue": [
+        {
+            "type": "SELL",
+            "symbol": "3529.TWO",
+            "reason": "Zombie"
+        },
+        {
+            "type": "BUY",
+            "symbol": "2345.TW",
+            "amount_usd": 156.6704104760123
+        }
+    ],
     "cooldown_dict": {},
-    "last_processed_date": "2026-04-28"
+    "last_processed_date": "2026-04-29"
 }
