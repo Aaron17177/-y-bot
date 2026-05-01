@@ -1,17 +1,6 @@
 {
-    "cash": 58.73107074203847,
+    "cash": 27.239586624674104,
     "positions": {
-        "3529.TWO": {
-            "symbol": "3529.TWO",
-            "entry_date": "2026-04-20",
-            "entry_price": 128.1271,
-            "units": 1.0,
-            "sector": "TW_STOCK",
-            "max_price": 145.46727612453185,
-            "current_price": 123.75844697651988,
-            "entry_price_twd": 4035.0,
-            "max_price_twd": 4570.0
-        },
         "3443.TW": {
             "symbol": "3443.TW",
             "entry_date": "2026-04-27",
@@ -19,7 +8,7 @@
             "units": 1.0,
             "sector": "TW_STOCK",
             "max_price": 137.75413648469683,
-            "current_price": 130.7396927034005,
+            "current_price": 134.69717202305185,
             "entry_price_twd": 4100.0,
             "max_price_twd": 4350.0
         },
@@ -30,23 +19,42 @@
             "units": 1.0,
             "sector": "TW_STOCK",
             "max_price": 152.86624389534535,
-            "current_price": 140.89423194249954,
+            "current_price": 143.70860254572082,
             "entry_price_twd": 4480.0,
             "max_price_twd": 4800.0
+        },
+        "2345.TW": {
+            "symbol": "2345.TW",
+            "entry_date": "2026-04-30",
+            "entry_price": 70.49310097812041,
+            "units": 2.221796282504791,
+            "sector": "TW_STOCK",
+            "max_price": 73.19811108764438,
+            "current_price": 72.0914441813517
         }
     },
     "orders_queue": [
         {
             "type": "SELL",
-            "symbol": "3529.TWO",
-            "reason": "Zombie"
+            "symbol": "2383.TW",
+            "reason": "Swap to IONX"
         },
         {
             "type": "BUY",
-            "symbol": "2345.TW",
-            "amount_usd": 156.6704104760123
+            "symbol": "IONX",
+            "amount_usd": 214.27487103400819
+        },
+        {
+            "type": "SELL",
+            "symbol": "3443.TW",
+            "reason": "Swap to OKLL"
+        },
+        {
+            "type": "BUY",
+            "symbol": "OKLL",
+            "amount_usd": 214.27487103400819
         }
     ],
     "cooldown_dict": {},
-    "last_processed_date": "2026-04-29"
+    "last_processed_date": "2026-04-30"
 }
