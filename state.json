@@ -1,5 +1,5 @@
 {
-    "cash": 27.239586624674104,
+    "cash": 27.24251378471532,
     "positions": {
         "3443.TW": {
             "symbol": "3443.TW",
@@ -7,8 +7,8 @@
             "entry_price": 130.3035,
             "units": 1.0,
             "sector": "TW_STOCK",
-            "max_price": 137.75413648469683,
-            "current_price": 134.69717202305185,
+            "max_price": 137.79340385691762,
+            "current_price": 134.94250584608483,
             "entry_price_twd": 4100.0,
             "max_price_twd": 4350.0
         },
@@ -19,7 +19,7 @@
             "units": 1.0,
             "sector": "TW_STOCK",
             "max_price": 152.86624389534535,
-            "current_price": 143.70860254572082,
+            "current_price": 143.9703495470553,
             "entry_price_twd": 4480.0,
             "max_price_twd": 4800.0
         },
@@ -29,8 +29,9 @@
             "entry_price": 70.49310097812041,
             "units": 2.221796282504791,
             "sector": "TW_STOCK",
-            "max_price": 73.19811108764438,
-            "current_price": 72.0914441813517
+            "max_price": 73.33143216753201,
+            "current_price": 72.22274960776372,
+            "max_price_twd": 2315.0
         }
     },
     "orders_queue": [
@@ -40,14 +41,14 @@
             "reason": "Swap to IONX"
         },
         {
-            "type": "BUY",
-            "symbol": "IONX",
-            "amount_usd": 214.27487103400819
-        },
-        {
             "type": "SELL",
             "symbol": "3443.TW",
             "reason": "Swap to OKLL"
+        },
+        {
+            "type": "BUY",
+            "symbol": "IONX",
+            "amount_usd": 214.27487103400819
         },
         {
             "type": "BUY",
@@ -56,5 +57,5 @@
         }
     ],
     "cooldown_dict": {},
-    "last_processed_date": "2026-04-30"
+    "last_processed_date": "2026-05-01"
 }
