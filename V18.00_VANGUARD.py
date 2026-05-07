@@ -150,6 +150,8 @@ ASSET_MAP = {
     'SOXL': 'LEV_3X',      # 3x SOXX
     # ADR
     'SE':   'US_GROWTH',   # Sea Limited
+    # [V18.11 註記] 嘗試加 16 檔小型股 (RIOT/HUT/SMR/...) → CAGR 856→665, MaxDD -54→-63
+    # 結論：universe 過大稀釋動能訊號，回到 78 美股最優
 }
 
 TIER_1_ASSETS = [
