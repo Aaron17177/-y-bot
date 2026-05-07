@@ -101,34 +101,23 @@ ASSET_MAP = {
     # [CR-08] UGL 移除; [CR-06] PENDLE-USD 移除
     'AGQ': 'US_STOCK',
     'ALAB': 'US_GROWTH', 'ARM': 'US_GROWTH', 'CEG': 'US_GROWTH', 'URA': 'US_STOCK',
-    # [CR-06] PENDLE-USD 移除
-    '2317.TW': 'TW_STOCK', '8996.TW': 'TW_STOCK',
-    '6442.TW': 'TW_STOCK', '8299.TWO': 'TW_STOCK', '3529.TWO': 'TW_STOCK', '6739.TWO': 'TW_STOCK',
-    # [CR-08] 2359.TW, 8054.TWO 移除
-    '3035.TW': 'TW_STOCK',
-    # [CR-08] 6531.TW 移除
-    '3324.TWO': 'TW_STOCK',
-    # --- V18.03 台股擴展 (5輪回測驗證, 全部正貢獻) ---
-    '3443.TW': 'TW_STOCK',   # 創意 (ASIC)
-    '2383.TW': 'TW_STOCK',   # 台光電 (CCL)
-    '3037.TW': 'TW_STOCK',   # 欣興 (ABF載板)
-    '2345.TW': 'TW_STOCK',   # 智邦 (AI網通)
-    '2327.TW': 'TW_STOCK',   # 國巨 (MLCC)
-    '2059.TW': 'TW_STOCK',   # 川湖 (伺服器滑軌)
-    '2404.TW': 'TW_STOCK',   # 漢唐 (無塵室)
-    '3005.TW': 'TW_STOCK',   # 神基 (強固電腦)
-    '6285.TW': 'TW_STOCK',   # 啟碁 (AI網通設備)
-    '6515.TW': 'TW_STOCK',   # 穎崴 (探針卡)
-    # --- V18.01 新增標的 (回測驗證 +6% 報酬) ---
-    'MSTR': 'US_GROWTH', 'COIN': 'US_GROWTH', 'MARA': 'US_STOCK',  # [V18.06] 重分類
+    # [V18.10 NO_TW_EXPANDED] 移除全部 .TW / .TWO（自動化路徑：Alpaca + Binance）
+    # 回測：CAGR 856%, MaxDD -54%, Sharpe 1.70 (vs baseline CAGR 1021%, MaxDD -49%)
+    # 替代品：US 半導體供應鏈 + IP + 槓桿 ETF
+    'AMAT': 'US_GROWTH',   # Applied Materials (沉積/蝕刻)
+    'LRCX': 'US_GROWTH',   # Lam Research
+    'ASML': 'US_GROWTH',   # ASML (微影)
+    'TER':  'US_GROWTH',   # Teradyne (測試，補 6515)
+    'TSM':  'US_GROWTH',   # TSMC ADR
+    # --- V18.01 新增標的 ---
+    'MSTR': 'US_GROWTH', 'COIN': 'US_GROWTH', 'MARA': 'US_STOCK',
     'SMCI': 'US_GROWTH', 'AXON': 'US_GROWTH',
-    '00670L.TW': 'TW_STOCK', '00757.TW': 'TW_STOCK',
     'XRP-USD': 'CRYPTO_SPOT', 'SUI20947-USD': 'CRYPTO_MEME',
     # --- V18.02 擴大標的池 ---
     'NVDA': 'US_GROWTH', 'TSLA': 'US_GROWTH', 'META': 'US_GROWTH',
     'AVGO': 'US_GROWTH', 'AMD': 'US_GROWTH',
-    'SHOP': 'US_GROWTH', 'NET': 'US_STOCK', 'ANET': 'US_GROWTH',  # [V18.06] 重分類
-    # --- V18.04 美股擴展 (回測驗證 CAGR+39pp, MaxDD改善) ---
+    'SHOP': 'US_GROWTH', 'NET': 'US_STOCK', 'ANET': 'US_GROWTH',
+    # --- V18.04 美股擴展 ---
     'TMDX': 'US_GROWTH',   # TransMedics (器官運輸)
     'LLY': 'US_STOCK',     # Eli Lilly (GLP-1)
     'HIMS': 'US_GROWTH',   # Hims (遠距醫療)
@@ -139,6 +128,28 @@ ASSET_MAP = {
     'SPOT': 'US_GROWTH',   # Spotify (串流)
     'FTNT': 'US_GROWTH',   # Fortinet (網安)
     'NU': 'US_GROWTH',     # Nu Holdings (FinTech)
+
+    # [V18.10] 補強 universe (NO_TW 後)
+    # 半導體深化
+    'KLAC': 'US_GROWTH',   # KLA - 量測檢測
+    'ENTG': 'US_GROWTH',   # Entegris - 半導體耗材
+    'ON':   'US_GROWTH',   # ON Semi - 類比/車用
+    'MCHP': 'US_STOCK',    # Microchip - MCU
+    'ADI':  'US_STOCK',    # Analog Devices
+    'NXPI': 'US_STOCK',    # NXP - 車用半導體
+    'MRVL': 'US_GROWTH',   # Marvell - ASIC
+    # 網通/儲存
+    'NTAP': 'US_STOCK',    # NetApp - 企業儲存
+    'PSTG': 'US_GROWTH',   # Pure Storage
+    # AI 基礎設施
+    'DELL': 'US_GROWTH',   # Dell - AI 伺服器
+    'HPE':  'US_STOCK',    # HPE
+    # 槓桿 ETF
+    'QLD':  'LEV_2X',      # 2x QQQ
+    'USD':  'LEV_2X',      # 2x Semiconductor
+    'SOXL': 'LEV_3X',      # 3x SOXX
+    # ADR
+    'SE':   'US_GROWTH',   # Sea Limited
 }
 
 TIER_1_ASSETS = [
