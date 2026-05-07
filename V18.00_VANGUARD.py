@@ -83,7 +83,8 @@ ASSET_MAP = {
     'FNGU': 'LEV_2X',
     # [CR-08] NVDL 移除
     'ASTX': 'LEV_2X','GGLL':'US_GROWTH',
-    'HOOX': 'LEV_2X', 'IONX': 'LEV_2X', 'OKLL': 'LEV_2X', 'RKLX': 'LEV_2X',
+    # [V18.10 流動性] 'HOOX' 移除（日 $2.8M, $20M 目標下 10% 部位佔比太薄）
+    'IONX': 'LEV_2X', 'OKLL': 'LEV_2X', 'RKLX': 'LEV_2X',
     'LUNR': 'US_GROWTH', 'QUBT': 'US_GROWTH',
     'PLTR': 'US_GROWTH', 'CRWD': 'US_STOCK', 'PANW': 'US_GROWTH',  # [V18.06] 重分類
     
@@ -95,7 +96,7 @@ ASSET_MAP = {
 
     'IONQ': 'US_STOCK', 'RGTI': 'US_GROWTH', 'RKLB': 'US_GROWTH', 'VRT': 'US_GROWTH',  # [V18.06] 重分類
     'VST': 'US_GROWTH', 'ASTS': 'US_GROWTH', 'OKLO': 'US_GROWTH',
-    'HOOD': 'US_GROWTH', 'SERV': 'US_STOCK',  # [V18.06] 重分類
+    'HOOD': 'US_GROWTH',  # [V18.10 流動性] 'SERV' 移除（日 $25M，1.1% 部位佔比偏薄）
     'GLD': 'US_STOCK','GLW': 'US_STOCK',
     # === A/B Test 倖存者保留 ===
     # [CR-08] UGL 移除; [CR-06] PENDLE-USD 移除
@@ -122,7 +123,7 @@ ASSET_MAP = {
     'LLY': 'US_STOCK',     # Eli Lilly (GLP-1)
     'HIMS': 'US_GROWTH',   # Hims (遠距醫療)
     'RDDT': 'US_GROWTH',   # Reddit (社群)
-    'CYBR': 'US_GROWTH',   # CyberArk (網安)
+    # [V18.10] 'CYBR' 移除（Alpaca tradable=False，可能合併下市）
     'GOOG': 'US_STOCK',    # Google
     'UBER': 'US_GROWTH',   # Uber (出行)
     'SPOT': 'US_GROWTH',   # Spotify (串流)
