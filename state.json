@@ -1,5 +1,5 @@
 {
-    "cash": 54.95228503731603,
+    "cash": 54.95819019788807,
     "positions": {
         "IONX": {
             "symbol": "IONX",
@@ -8,7 +8,7 @@
             "units": 4.442369358695314,
             "sector": "LEV_2X",
             "max_price": 62.94499969482422,
-            "current_price": 61.099998474121094
+            "current_price": 49.52000045776367
         },
         "OKLL": {
             "symbol": "OKLL",
@@ -17,16 +17,36 @@
             "units": 19.817583342242585,
             "sector": "LEV_2X",
             "max_price": 13.574999809265137,
-            "current_price": 13.449999809265137
+            "current_price": 10.819999694824219
         }
     },
     "orders_queue": [
         {
+            "type": "SELL",
+            "symbol": "OKLL",
+            "reason": "Swap to SOXL"
+        },
+        {
             "type": "BUY",
             "symbol": "SOXL",
-            "amount_usd": 204.55796363418236
+            "amount_usd": 225.10774517719352
+        },
+        {
+            "type": "SELL",
+            "symbol": "IONX",
+            "reason": "Swap to AMD"
+        },
+        {
+            "type": "BUY",
+            "symbol": "AMD",
+            "amount_usd": 225.10774517719352
+        },
+        {
+            "type": "BUY",
+            "symbol": "SNDK",
+            "amount_usd": 168.83080888289513
         }
     ],
     "cooldown_dict": {},
-    "last_processed_date": "2026-05-06"
+    "last_processed_date": "2026-05-07"
 }
