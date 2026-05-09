@@ -1,52 +1,32 @@
 {
-    "cash": 54.95819019788807,
+    "cash": 58.57545852729194,
     "positions": {
-        "IONX": {
-            "symbol": "IONX",
-            "entry_date": "2026-05-04",
-            "entry_price": 48.186180152893066,
-            "units": 4.442369358695314,
-            "sector": "LEV_2X",
-            "max_price": 62.94499969482422,
-            "current_price": 49.52000045776367
+        "SOXL": {
+            "symbol": "SOXL",
+            "entry_date": "2026-05-08",
+            "entry_price": 163.326,
+            "units": 1.3768956707130444,
+            "sector": "LEV_3X",
+            "max_price": 177.5,
+            "current_price": 176.94000244140625
         },
-        "OKLL": {
-            "symbol": "OKLL",
-            "entry_date": "2026-05-04",
-            "entry_price": 10.801559732437134,
-            "units": 19.817583342242585,
-            "sector": "LEV_2X",
-            "max_price": 13.574999809265137,
-            "current_price": 10.819999694824219
+        "AMD": {
+            "symbol": "AMD",
+            "entry_date": "2026-05-08",
+            "entry_price": 419.4271763305664,
+            "units": 0.5361666458580643,
+            "sector": "US_GROWTH",
+            "max_price": 456.2900085449219,
+            "current_price": 455.19000244140625
         }
     },
     "orders_queue": [
         {
-            "type": "SELL",
-            "symbol": "OKLL",
-            "reason": "Swap to SOXL"
-        },
-        {
-            "type": "BUY",
-            "symbol": "SOXL",
-            "amount_usd": 225.10774517719352
-        },
-        {
-            "type": "SELL",
-            "symbol": "IONX",
-            "reason": "Swap to AMD"
-        },
-        {
-            "type": "BUY",
-            "symbol": "AMD",
-            "amount_usd": 225.10774517719352
-        },
-        {
             "type": "BUY",
             "symbol": "SNDK",
-            "amount_usd": 168.83080888289513
+            "amount_usd": 188.4579007809368
         }
     ],
     "cooldown_dict": {},
-    "last_processed_date": "2026-05-07"
+    "last_processed_date": "2026-05-08"
 }
