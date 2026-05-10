@@ -1,5 +1,5 @@
 {
-    "cash": 58.57545852729194,
+    "cash": 58.58175303329747,
     "positions": {
         "SOXL": {
             "symbol": "SOXL",
@@ -28,5 +28,5 @@
         }
     ],
     "cooldown_dict": {},
-    "last_processed_date": "2026-05-08"
+    "last_processed_date": "2026-05-09"
 }
