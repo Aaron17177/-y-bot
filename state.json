@@ -1,5 +1,5 @@
 {
-    "cash": 58.58175303329747,
+    "cash": 58.588048215709236,
     "positions": {
         "SOXL": {
             "symbol": "SOXL",
@@ -7,7 +7,7 @@
             "entry_price": 163.326,
             "units": 1.3768956707130444,
             "sector": "LEV_3X",
-            "max_price": 177.5,
+            "max_price": 189.3800048828125,
             "current_price": 176.94000244140625
         },
         "AMD": {
@@ -16,7 +16,7 @@
             "entry_price": 419.4271763305664,
             "units": 0.5361666458580643,
             "sector": "US_GROWTH",
-            "max_price": 456.2900085449219,
+            "max_price": 467.67999267578125,
             "current_price": 455.19000244140625
         }
     },
@@ -28,5 +28,5 @@
         }
     ],
     "cooldown_dict": {},
-    "last_processed_date": "2026-05-09"
+    "last_processed_date": "2026-05-10"
 }
