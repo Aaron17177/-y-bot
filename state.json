@@ -1,5 +1,5 @@
 {
-    "cash": 58.588048215709236,
+    "cash": 58.59434407459993,
     "positions": {
         "SOXL": {
             "symbol": "SOXL",
@@ -7,8 +7,8 @@
             "entry_price": 163.326,
             "units": 1.3768956707130444,
             "sector": "LEV_3X",
-            "max_price": 189.3800048828125,
-            "current_price": 176.94000244140625
+            "max_price": 191.2899932861328,
+            "current_price": 190.4199981689453
         },
         "AMD": {
             "symbol": "AMD",
@@ -16,17 +16,27 @@
             "entry_price": 419.4271763305664,
             "units": 0.5361666458580643,
             "sector": "US_GROWTH",
-            "max_price": 467.67999267578125,
-            "current_price": 455.19000244140625
+            "max_price": 469.2200012207031,
+            "current_price": 458.7900085449219
         }
     },
     "orders_queue": [
         {
+            "type": "SELL",
+            "symbol": "AMD",
+            "reason": "Swap to RKLX"
+        },
+        {
+            "type": "BUY",
+            "symbol": "RKLX",
+            "amount_usd": 260.7116328993621
+        },
+        {
             "type": "BUY",
             "symbol": "SNDK",
-            "amount_usd": 188.4579007809368
+            "amount_usd": 195.53372467452158
         }
     ],
     "cooldown_dict": {},
-    "last_processed_date": "2026-05-10"
+    "last_processed_date": "2026-05-11"
 }
