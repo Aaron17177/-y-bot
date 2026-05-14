@@ -1,5 +1,5 @@
 {
-    "cash": 38.03752704091878,
+    "cash": 38.04161454528348,
     "positions": {
         "SOXL": {
             "symbol": "SOXL",
@@ -8,7 +8,7 @@
             "units": 1.3768956707130444,
             "sector": "LEV_3X",
             "max_price": 191.2899932861328,
-            "current_price": 172.52000427246094
+            "current_price": 184.24000549316406
         },
         "RKLX": {
             "symbol": "RKLX",
@@ -16,17 +16,17 @@
             "entry_price": 66.95864694213867,
             "units": 3.889731851103705,
             "sector": "LEV_2X",
-            "max_price": 77.5999984741211,
-            "current_price": 72.8499984741211
+            "max_price": 85.19989776611328,
+            "current_price": 80.87000274658203
         }
     },
     "orders_queue": [
         {
             "type": "BUY",
-            "symbol": "SNDK",
-            "amount_usd": 192.8351440037019
+            "symbol": "RKLB",
+            "amount_usd": 209.16639936829566
         }
     ],
     "cooldown_dict": {},
-    "last_processed_date": "2026-05-12"
+    "last_processed_date": "2026-05-13"
 }
