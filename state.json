@@ -1,15 +1,6 @@
 {
-    "cash": 38.045702488890505,
+    "cash": 0.0,
     "positions": {
-        "SOXL": {
-            "symbol": "SOXL",
-            "entry_date": "2026-05-08",
-            "entry_price": 163.326,
-            "units": 1.3768956707130444,
-            "sector": "LEV_3X",
-            "max_price": 191.2899932861328,
-            "current_price": 186.19000244140625
-        },
         "RKLX": {
             "symbol": "RKLX",
             "entry_date": "2026-05-12",
@@ -17,26 +8,25 @@
             "units": 3.889731851103705,
             "sector": "LEV_2X",
             "max_price": 92.55500030517578,
-            "current_price": 91.62000274658203
+            "current_price": 80.8499984741211
+        },
+        "RKLB": {
+            "symbol": "RKLB",
+            "entry_date": "2026-05-15",
+            "entry_price": 128.35620611572264,
+            "units": 2.0803893465469154,
+            "sector": "US_GROWTH",
+            "max_price": 130.3699951171875,
+            "current_price": 124.7699966430664
         }
     },
     "orders_queue": [
         {
-            "type": "SELL",
-            "symbol": "SOXL",
-            "reason": "Swap to RKLB"
-        },
-        {
-            "type": "BUY",
-            "symbol": "RKLB",
-            "amount_usd": 299.36021023050813
-        },
-        {
             "type": "BUY",
             "symbol": "IONX",
-            "amount_usd": 224.52015767288106
+            "amount_usd": 198.04897017393452
         }
     ],
     "cooldown_dict": {},
-    "last_processed_date": "2026-05-14"
+    "last_processed_date": "2026-05-15"
 }
