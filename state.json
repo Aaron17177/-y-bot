@@ -25,8 +25,18 @@
             "type": "BUY",
             "symbol": "IONX",
             "amount_usd": 198.04897017393452
+        },
+        {
+            "type": "SELL",
+            "symbol": "RKLX",
+            "reason": "Swap to SUI20947-USD"
+        },
+        {
+            "type": "BUY",
+            "symbol": "SUI20947-USD",
+            "amount_usd": 264.06529356524607
         }
     ],
     "cooldown_dict": {},
-    "last_processed_date": "2026-05-15"
+    "last_processed_date": "2026-05-16"
 }
