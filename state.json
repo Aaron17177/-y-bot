@@ -1,15 +1,6 @@
 {
     "cash": 0.0,
     "positions": {
-        "RKLX": {
-            "symbol": "RKLX",
-            "entry_date": "2026-05-12",
-            "entry_price": 66.95864694213867,
-            "units": 3.889731851103705,
-            "sector": "LEV_2X",
-            "max_price": 98.19999694824219,
-            "current_price": 80.8499984741211
-        },
         "RKLB": {
             "symbol": "RKLB",
             "entry_date": "2026-05-15",
@@ -17,26 +8,39 @@
             "units": 2.0803893465469154,
             "sector": "US_GROWTH",
             "max_price": 138.3800048828125,
-            "current_price": 124.7699966430664
+            "current_price": 131.16000366210938
+        },
+        "IONX": {
+            "symbol": "IONX",
+            "entry_date": "2026-05-18",
+            "entry_price": 56.327430152893065,
+            "units": 3.5125181198190654,
+            "sector": "LEV_2X",
+            "max_price": 57.0099983215332,
+            "current_price": 50.88999938964844
+        },
+        "SUI20947-USD": {
+            "symbol": "SUI20947-USD",
+            "entry_date": "2026-05-18",
+            "entry_price": 1.04583647274971,
+            "units": 149.77278080695584,
+            "sector": "CRYPTO_MEME",
+            "max_price": 1.0636420249938965,
+            "current_price": 1.0624439716339111
         }
     },
     "orders_queue": [
         {
             "type": "SELL",
+            "symbol": "RKLB",
+            "reason": "Swap to RKLX"
+        },
+        {
+            "type": "BUY",
             "symbol": "RKLX",
-            "reason": "Swap to SUI20947-USD"
-        },
-        {
-            "type": "BUY",
-            "symbol": "IONX",
-            "amount_usd": 198.04897017393452
-        },
-        {
-            "type": "BUY",
-            "symbol": "SUI20947-USD",
-            "amount_usd": 264.06529356524607
+            "amount_usd": 280.94090938956765
         }
     ],
     "cooldown_dict": {},
-    "last_processed_date": "2026-05-17"
+    "last_processed_date": "2026-05-18"
 }
