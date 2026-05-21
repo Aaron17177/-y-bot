@@ -1,23 +1,14 @@
 {
-    "cash": -5.684341886080802e-14,
+    "cash": 177.39473755378984,
     "positions": {
-        "IONX": {
-            "symbol": "IONX",
-            "entry_date": "2026-05-18",
-            "entry_price": 56.327430152893065,
-            "units": 3.5125181198190654,
-            "sector": "LEV_2X",
-            "max_price": 57.0099983215332,
-            "current_price": 49.060001373291016
-        },
         "SUI20947-USD": {
             "symbol": "SUI20947-USD",
             "entry_date": "2026-05-18",
             "entry_price": 1.04583647274971,
             "units": 149.77278080695584,
             "sector": "CRYPTO_MEME",
-            "max_price": 1.096248984336853,
-            "current_price": 1.0515929460525513
+            "max_price": 1.1445187330245972,
+            "current_price": 1.0774070024490356
         },
         "RKLX": {
             "symbol": "RKLX",
@@ -25,11 +16,19 @@
             "entry_price": 81.94355877685547,
             "units": 3.185362664926659,
             "sector": "LEV_2X",
-            "max_price": 86.73999786376953,
-            "current_price": 83.01000213623047
+            "max_price": 94.08000183105469,
+            "current_price": 92.4800033569336
         }
     },
-    "orders_queue": [],
-    "cooldown_dict": {},
-    "last_processed_date": "2026-05-19"
+    "orders_queue": [
+        {
+            "type": "BUY",
+            "symbol": "RKLB",
+            "amount_usd": 218.4968730000529
+        }
+    ],
+    "cooldown_dict": {
+        "IONX": "2026-05-21"
+    },
+    "last_processed_date": "2026-05-20"
 }
