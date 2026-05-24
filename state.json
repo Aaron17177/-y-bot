@@ -29,7 +29,18 @@
             "current_price": 82.0
         }
     },
-    "orders_queue": [],
+    "orders_queue": [
+        {
+            "type": "SELL",
+            "symbol": "RKLX",
+            "reason": "Swap to NEAR-USD"
+        },
+        {
+            "type": "BUY",
+            "symbol": "NEAR-USD",
+            "amount_usd": 315.9248561835944
+        }
+    ],
     "cooldown_dict": {},
-    "last_processed_date": "2026-05-22"
+    "last_processed_date": "2026-05-23"
 }
