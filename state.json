@@ -7,7 +7,7 @@
             "entry_price": 81.94355877685547,
             "units": 3.185362664926659,
             "sector": "LEV_2X",
-            "max_price": 98.58000183105469,
+            "max_price": 107.55000305175781,
             "current_price": 93.31999969482422
         },
         "RKLB": {
@@ -16,7 +16,7 @@
             "entry_price": 126.39227938842774,
             "units": 1.402122984815652,
             "sector": "US_GROWTH",
-            "max_price": 139.75999450683594,
+            "max_price": 146.0,
             "current_price": 135.75999450683594
         },
         "IONX": {
@@ -36,21 +36,26 @@
             "reason": "Swap to NEAR-USD"
         },
         {
-            "type": "BUY",
-            "symbol": "NEAR-USD",
-            "amount_usd": 315.9248561835944
-        },
-        {
             "type": "SELL",
             "symbol": "RKLB",
             "reason": "Swap to NEAR-USD"
         },
         {
             "type": "BUY",
+            "symbol": "NEAR-USD",
+            "amount_usd": 315.9248561835944
+        },
+        {
+            "type": "BUY",
             "symbol": "RENDER-USD",
             "amount_usd": 236.94364213769583
+        },
+        {
+            "type": "SELL",
+            "symbol": "IONX",
+            "reason": "Swap to NEAR-USD"
         }
     ],
     "cooldown_dict": {},
-    "last_processed_date": "2026-05-24"
+    "last_processed_date": "2026-05-25"
 }
