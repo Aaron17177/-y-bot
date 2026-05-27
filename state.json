@@ -1,61 +1,32 @@
 {
-    "cash": -2.842170943040401e-14,
+    "cash": 173.74140000256685,
     "positions": {
-        "RKLX": {
-            "symbol": "RKLX",
-            "entry_date": "2026-05-19",
-            "entry_price": 81.94355877685547,
-            "units": 3.185362664926659,
-            "sector": "LEV_2X",
-            "max_price": 107.55000305175781,
-            "current_price": 93.31999969482422
+        "NEAR-USD": {
+            "symbol": "NEAR-USD",
+            "entry_date": "2026-05-26",
+            "entry_price": 2.783665291786194,
+            "units": 113.37902148937627,
+            "sector": "CRYPTO_MEME",
+            "max_price": 2.96684193611145,
+            "current_price": 2.543389081954956
         },
-        "RKLB": {
-            "symbol": "RKLB",
-            "entry_date": "2026-05-21",
-            "entry_price": 126.39227938842774,
-            "units": 1.402122984815652,
-            "sector": "US_GROWTH",
-            "max_price": 146.0,
-            "current_price": 135.75999450683594
-        },
-        "IONX": {
-            "symbol": "IONX",
-            "entry_date": "2026-05-22",
-            "entry_price": 68.9275809173584,
-            "units": 2.429059926599612,
-            "sector": "LEV_2X",
-            "max_price": 87.30000305175781,
-            "current_price": 82.0
+        "RENDER-USD": {
+            "symbol": "RENDER-USD",
+            "entry_date": "2026-05-26",
+            "entry_price": 2.1838679423332215,
+            "units": 108.38885017452024,
+            "sector": "CRYPTO_MEME",
+            "max_price": 2.4305710792541504,
+            "current_price": 2.2931549549102783
         }
     },
     "orders_queue": [
         {
-            "type": "SELL",
+            "type": "BUY",
             "symbol": "RKLX",
-            "reason": "Swap to NEAR-USD"
-        },
-        {
-            "type": "SELL",
-            "symbol": "RKLB",
-            "reason": "Swap to NEAR-USD"
-        },
-        {
-            "type": "BUY",
-            "symbol": "NEAR-USD",
-            "amount_usd": 315.9248561835944
-        },
-        {
-            "type": "BUY",
-            "symbol": "RENDER-USD",
-            "amount_usd": 236.94364213769583
-        },
-        {
-            "type": "SELL",
-            "symbol": "IONX",
-            "reason": "Swap to NEAR-USD"
+            "amount_usd": 245.17153347318074
         }
     ],
     "cooldown_dict": {},
-    "last_processed_date": "2026-05-25"
+    "last_processed_date": "2026-05-26"
 }
