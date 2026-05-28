@@ -1,5 +1,5 @@
 {
-    "cash": 173.74140000256685,
+    "cash": -2.842170943040401e-14,
     "positions": {
         "NEAR-USD": {
             "symbol": "NEAR-USD",
@@ -8,7 +8,7 @@
             "units": 113.37902148937627,
             "sector": "CRYPTO_MEME",
             "max_price": 2.96684193611145,
-            "current_price": 2.543389081954956
+            "current_price": 2.494873046875
         },
         "RENDER-USD": {
             "symbol": "RENDER-USD",
@@ -17,16 +17,19 @@
             "units": 108.38885017452024,
             "sector": "CRYPTO_MEME",
             "max_price": 2.4305710792541504,
-            "current_price": 2.2931549549102783
+            "current_price": 2.1327219009399414
+        },
+        "RKLX": {
+            "symbol": "RKLX",
+            "entry_date": "2026-05-27",
+            "entry_price": 113.44644122314453,
+            "units": 1.5299539615261761,
+            "sector": "LEV_2X",
+            "max_price": 114.83000183105469,
+            "current_price": 113.69999694824219
         }
     },
-    "orders_queue": [
-        {
-            "type": "BUY",
-            "symbol": "RKLX",
-            "amount_usd": 245.17153347318074
-        }
-    ],
+    "orders_queue": [],
     "cooldown_dict": {},
-    "last_processed_date": "2026-05-26"
+    "last_processed_date": "2026-05-27"
 }
