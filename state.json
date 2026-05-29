@@ -8,7 +8,7 @@
             "units": 113.37902148937627,
             "sector": "CRYPTO_MEME",
             "max_price": 2.96684193611145,
-            "current_price": 2.494873046875
+            "current_price": 2.417902946472168
         },
         "RENDER-USD": {
             "symbol": "RENDER-USD",
@@ -17,7 +17,7 @@
             "units": 108.38885017452024,
             "sector": "CRYPTO_MEME",
             "max_price": 2.4305710792541504,
-            "current_price": 2.1327219009399414
+            "current_price": 1.9970049858093262
         },
         "RKLX": {
             "symbol": "RKLX",
@@ -26,10 +26,10 @@
             "units": 1.5299539615261761,
             "sector": "LEV_2X",
             "max_price": 114.83000183105469,
-            "current_price": 113.69999694824219
+            "current_price": 110.11000061035156
         }
     },
     "orders_queue": [],
     "cooldown_dict": {},
-    "last_processed_date": "2026-05-27"
+    "last_processed_date": "2026-05-28"
 }
