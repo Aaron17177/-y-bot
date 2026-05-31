@@ -1,24 +1,6 @@
 {
-    "cash": -2.842170943040401e-14,
+    "cash": 481.3102902664722,
     "positions": {
-        "NEAR-USD": {
-            "symbol": "NEAR-USD",
-            "entry_date": "2026-05-26",
-            "entry_price": 2.783665291786194,
-            "units": 113.37902148937627,
-            "sector": "CRYPTO_MEME",
-            "max_price": 2.96684193611145,
-            "current_price": 2.3785250186920166
-        },
-        "RENDER-USD": {
-            "symbol": "RENDER-USD",
-            "entry_date": "2026-05-26",
-            "entry_price": 2.1838679423332215,
-            "units": 108.38885017452024,
-            "sector": "CRYPTO_MEME",
-            "max_price": 2.4305710792541504,
-            "current_price": 1.9655539989471436
-        },
         "RKLX": {
             "symbol": "RKLX",
             "entry_date": "2026-05-27",
@@ -31,26 +13,26 @@
     },
     "orders_queue": [
         {
-            "type": "SELL",
-            "symbol": "RENDER-USD",
-            "reason": "Swap to ASTX"
-        },
-        {
             "type": "BUY",
             "symbol": "ASTX",
             "amount_usd": 294.6103249756509
         },
         {
-            "type": "SELL",
-            "symbol": "NEAR-USD",
-            "reason": "Swap to IONX"
-        },
-        {
             "type": "BUY",
             "symbol": "IONX",
             "amount_usd": 294.6103249756509
+        },
+        {
+            "type": "SELL",
+            "symbol": "RKLX",
+            "reason": "Swap to NEAR-USD"
+        },
+        {
+            "type": "BUY",
+            "symbol": "NEAR-USD",
+            "amount_usd": 293.9385396949482
         }
     ],
     "cooldown_dict": {},
-    "last_processed_date": "2026-05-29"
+    "last_processed_date": "2026-05-30"
 }
