@@ -1,5 +1,5 @@
 {
-    "cash": 481.3102902664722,
+    "cash": 187.3918854989986,
     "positions": {
         "RKLX": {
             "symbol": "RKLX",
@@ -9,9 +9,23 @@
             "sector": "LEV_2X",
             "max_price": 114.83000183105469,
             "current_price": 103.0999984741211
+        },
+        "NEAR-USD": {
+            "symbol": "NEAR-USD",
+            "entry_date": "2026-05-31",
+            "entry_price": 2.25137668132782,
+            "units": 130.42903803505763,
+            "sector": "CRYPTO_MEME",
+            "max_price": 2.3472740650177,
+            "current_price": 2.322521924972534
         }
     },
     "orders_queue": [
+        {
+            "type": "SELL",
+            "symbol": "RKLX",
+            "reason": "Swap to NEAR-USD"
+        },
         {
             "type": "BUY",
             "symbol": "ASTX",
@@ -21,18 +35,8 @@
             "type": "BUY",
             "symbol": "IONX",
             "amount_usd": 294.6103249756509
-        },
-        {
-            "type": "SELL",
-            "symbol": "RKLX",
-            "reason": "Swap to NEAR-USD"
-        },
-        {
-            "type": "BUY",
-            "symbol": "NEAR-USD",
-            "amount_usd": 293.9385396949482
         }
     ],
     "cooldown_dict": {},
-    "last_processed_date": "2026-05-30"
+    "last_processed_date": "2026-05-31"
 }
