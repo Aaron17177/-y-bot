@@ -1,42 +1,42 @@
 {
-    "cash": 187.3918854989986,
+    "cash": 25.87262516196901,
     "positions": {
-        "RKLX": {
-            "symbol": "RKLX",
-            "entry_date": "2026-05-27",
-            "entry_price": 113.44644122314453,
-            "units": 1.5299539615261761,
-            "sector": "LEV_2X",
-            "max_price": 114.83000183105469,
-            "current_price": 103.0999984741211
-        },
         "NEAR-USD": {
             "symbol": "NEAR-USD",
             "entry_date": "2026-05-31",
             "entry_price": 2.25137668132782,
             "units": 130.42903803505763,
             "sector": "CRYPTO_MEME",
-            "max_price": 2.3472740650177,
-            "current_price": 2.322521924972534
+            "max_price": 2.7448980808258057,
+            "current_price": 2.6326730251312256
+        },
+        "ASTX": {
+            "symbol": "ASTX",
+            "entry_date": "2026-06-01",
+            "entry_price": 49.43868015289306,
+            "units": 5.953152633858519,
+            "sector": "LEV_2X",
+            "max_price": 51.88999938964844,
+            "current_price": 46.43000030517578
         }
     },
     "orders_queue": [
         {
             "type": "SELL",
-            "symbol": "RKLX",
-            "reason": "Swap to NEAR-USD"
+            "symbol": "NEAR-USD",
+            "reason": "Regime Fail"
         },
         {
             "type": "BUY",
-            "symbol": "ASTX",
-            "amount_usd": 294.6103249756509
+            "symbol": "DELL",
+            "amount_usd": 222.7498482056993
         },
         {
             "type": "BUY",
-            "symbol": "IONX",
-            "amount_usd": 294.6103249756509
+            "symbol": "ARM",
+            "amount_usd": 222.7498482056993
         }
     ],
     "cooldown_dict": {},
-    "last_processed_date": "2026-05-31"
+    "last_processed_date": "2026-06-01"
 }
