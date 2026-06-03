@@ -1,42 +1,35 @@
 {
-    "cash": 25.87262516196901,
+    "cash": 0.0,
     "positions": {
-        "NEAR-USD": {
-            "symbol": "NEAR-USD",
-            "entry_date": "2026-05-31",
-            "entry_price": 2.25137668132782,
-            "units": 130.42903803505763,
-            "sector": "CRYPTO_MEME",
-            "max_price": 2.7448980808258057,
-            "current_price": 2.6326730251312256
-        },
         "ASTX": {
             "symbol": "ASTX",
             "entry_date": "2026-06-01",
             "entry_price": 49.43868015289306,
             "units": 5.953152633858519,
             "sector": "LEV_2X",
-            "max_price": 51.88999938964844,
-            "current_price": 46.43000030517578
+            "max_price": 58.040000915527344,
+            "current_price": 57.38999938964844
+        },
+        "DELL": {
+            "symbol": "DELL",
+            "entry_date": "2026-06-02",
+            "entry_price": 467.0422053222656,
+            "units": 0.4764608387613868,
+            "sector": "US_GROWTH",
+            "max_price": 469.19000244140625,
+            "current_price": 435.30999755859375
+        },
+        "ARM": {
+            "symbol": "ARM",
+            "entry_date": "2026-06-02",
+            "entry_price": 401.93226489257813,
+            "units": 0.3615659415390901,
+            "sector": "US_GROWTH",
+            "max_price": 427.989990234375,
+            "current_price": 402.7099914550781
         }
     },
-    "orders_queue": [
-        {
-            "type": "SELL",
-            "symbol": "NEAR-USD",
-            "reason": "Regime Fail"
-        },
-        {
-            "type": "BUY",
-            "symbol": "DELL",
-            "amount_usd": 222.7498482056993
-        },
-        {
-            "type": "BUY",
-            "symbol": "ARM",
-            "amount_usd": 222.7498482056993
-        }
-    ],
+    "orders_queue": [],
     "cooldown_dict": {},
-    "last_processed_date": "2026-06-01"
+    "last_processed_date": "2026-06-02"
 }
