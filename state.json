@@ -8,7 +8,7 @@
             "units": 5.953152633858519,
             "sector": "LEV_2X",
             "max_price": 58.040000915527344,
-            "current_price": 57.38999938964844
+            "current_price": 47.310001373291016
         },
         "DELL": {
             "symbol": "DELL",
@@ -17,7 +17,7 @@
             "units": 0.4764608387613868,
             "sector": "US_GROWTH",
             "max_price": 469.19000244140625,
-            "current_price": 435.30999755859375
+            "current_price": 421.0799865722656
         },
         "ARM": {
             "symbol": "ARM",
@@ -26,10 +26,10 @@
             "units": 0.3615659415390901,
             "sector": "US_GROWTH",
             "max_price": 427.989990234375,
-            "current_price": 402.7099914550781
+            "current_price": 411.8299865722656
         }
     },
     "orders_queue": [],
     "cooldown_dict": {},
-    "last_processed_date": "2026-06-02"
+    "last_processed_date": "2026-06-03"
 }
