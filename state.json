@@ -1,15 +1,6 @@
 {
     "cash": 0.0,
     "positions": {
-        "ASTX": {
-            "symbol": "ASTX",
-            "entry_date": "2026-06-01",
-            "entry_price": 49.43868015289306,
-            "units": 5.953152633858519,
-            "sector": "LEV_2X",
-            "max_price": 58.040000915527344,
-            "current_price": 46.810001373291016
-        },
         "DELL": {
             "symbol": "DELL",
             "entry_date": "2026-06-02",
@@ -17,7 +8,7 @@
             "units": 0.4764608387613868,
             "sector": "US_GROWTH",
             "max_price": 469.19000244140625,
-            "current_price": 422.04998779296875
+            "current_price": 394.3900146484375
         },
         "ARM": {
             "symbol": "ARM",
@@ -26,21 +17,19 @@
             "units": 0.3615659415390901,
             "sector": "US_GROWTH",
             "max_price": 427.989990234375,
-            "current_price": 393.44000244140625
+            "current_price": 342.92999267578125
+        },
+        "MRVL": {
+            "symbol": "MRVL",
+            "entry_date": "2026-06-05",
+            "entry_price": 300.099,
+            "units": 0.8646129142936673,
+            "sector": "US_GROWTH",
+            "max_price": 300.7200012207031,
+            "current_price": 263.4700012207031
         }
     },
-    "orders_queue": [
-        {
-            "type": "SELL",
-            "symbol": "ASTX",
-            "reason": "Swap to MRVL"
-        },
-        {
-            "type": "BUY",
-            "symbol": "MRVL",
-            "amount_usd": 286.1254643727833
-        }
-    ],
+    "orders_queue": [],
     "cooldown_dict": {},
-    "last_processed_date": "2026-06-04"
+    "last_processed_date": "2026-06-05"
 }
