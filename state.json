@@ -25,11 +25,11 @@
             "entry_price": 300.099,
             "units": 0.8646129142936673,
             "sector": "US_GROWTH",
-            "max_price": 300.7200012207031,
+            "max_price": 304.9599914550781,
             "current_price": 263.4700012207031
         }
     },
     "orders_queue": [],
     "cooldown_dict": {},
-    "last_processed_date": "2026-06-06"
+    "last_processed_date": "2026-06-07"
 }
