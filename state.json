@@ -8,7 +8,7 @@
             "units": 0.4764608387613868,
             "sector": "US_GROWTH",
             "max_price": 469.19000244140625,
-            "current_price": 400.7699890136719
+            "current_price": 381.7799987792969
         },
         "ARM": {
             "symbol": "ARM",
@@ -17,7 +17,7 @@
             "units": 0.3615659415390901,
             "sector": "US_GROWTH",
             "max_price": 427.989990234375,
-            "current_price": 346.3900146484375
+            "current_price": 324.8599853515625
         },
         "MRVL": {
             "symbol": "MRVL",
@@ -26,10 +26,21 @@
             "units": 0.8646129142936673,
             "sector": "US_GROWTH",
             "max_price": 304.9599914550781,
-            "current_price": 288.8500061035156
+            "current_price": 266.8800048828125
         }
     },
-    "orders_queue": [],
+    "orders_queue": [
+        {
+            "type": "SELL",
+            "symbol": "ARM",
+            "reason": "Swap to HPE"
+        },
+        {
+            "type": "BUY",
+            "symbol": "HPE",
+            "amount_usd": 243.850334902531
+        }
+    ],
     "cooldown_dict": {},
-    "last_processed_date": "2026-06-08"
+    "last_processed_date": "2026-06-09"
 }
