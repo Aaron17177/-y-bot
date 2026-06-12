@@ -1,15 +1,6 @@
 {
-    "cash": -2.842170943040401e-14,
+    "cash": 24.522804740930347,
     "positions": {
-        "DELL": {
-            "symbol": "DELL",
-            "entry_date": "2026-06-02",
-            "entry_price": 467.0422053222656,
-            "units": 0.4764608387613868,
-            "sector": "US_GROWTH",
-            "max_price": 469.19000244140625,
-            "current_price": 369.8299865722656
-        },
         "MRVL": {
             "symbol": "MRVL",
             "entry_date": "2026-06-05",
@@ -17,7 +8,7 @@
             "units": 0.8646129142936673,
             "sector": "US_GROWTH",
             "max_price": 304.9599914550781,
-            "current_price": 252.58999633789062
+            "current_price": 280.7099914550781
         },
         "HPE": {
             "symbol": "HPE",
@@ -25,22 +16,20 @@
             "entry_price": 47.945698471069335,
             "units": 2.361995354088166,
             "sector": "US_STOCK",
-            "max_price": 47.970001220703125,
-            "current_price": 45.4900016784668
+            "max_price": 49.47999954223633,
+            "current_price": 46.79999923706055
+        },
+        "AXON": {
+            "symbol": "AXON",
+            "entry_date": "2026-06-11",
+            "entry_price": 445.65952899169923,
+            "units": 0.3376216623325691,
+            "sector": "US_GROWTH",
+            "max_price": 453.1499938964844,
+            "current_price": 446.20001220703125
         }
     },
-    "orders_queue": [
-        {
-            "type": "SELL",
-            "symbol": "DELL",
-            "reason": "Zombie"
-        },
-        {
-            "type": "BUY",
-            "symbol": "AXON",
-            "amount_usd": 150.61477532353976
-        }
-    ],
+    "orders_queue": [],
     "cooldown_dict": {},
-    "last_processed_date": "2026-06-10"
+    "last_processed_date": "2026-06-11"
 }
