@@ -1,5 +1,5 @@
 {
-    "cash": 24.522804740930347,
+    "cash": 24.52543995618252,
     "positions": {
         "MRVL": {
             "symbol": "MRVL",
@@ -8,7 +8,7 @@
             "units": 0.8646129142936673,
             "sector": "US_GROWTH",
             "max_price": 304.9599914550781,
-            "current_price": 280.7099914550781
+            "current_price": 279.70001220703125
         },
         "HPE": {
             "symbol": "HPE",
@@ -16,8 +16,8 @@
             "entry_price": 47.945698471069335,
             "units": 2.361995354088166,
             "sector": "US_STOCK",
-            "max_price": 49.47999954223633,
-            "current_price": 46.79999923706055
+            "max_price": 49.779998779296875,
+            "current_price": 48.16999816894531
         },
         "AXON": {
             "symbol": "AXON",
@@ -26,10 +26,10 @@
             "units": 0.3376216623325691,
             "sector": "US_GROWTH",
             "max_price": 453.1499938964844,
-            "current_price": 446.20001220703125
+            "current_price": 441.7300109863281
         }
     },
     "orders_queue": [],
     "cooldown_dict": {},
-    "last_processed_date": "2026-06-11"
+    "last_processed_date": "2026-06-12"
 }
