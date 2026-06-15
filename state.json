@@ -1,5 +1,5 @@
 {
-    "cash": 24.52807545461435,
+    "cash": 24.530711236256266,
     "positions": {
         "MRVL": {
             "symbol": "MRVL",
@@ -25,11 +25,11 @@
             "entry_price": 445.65952899169923,
             "units": 0.3376216623325691,
             "sector": "US_GROWTH",
-            "max_price": 453.1499938964844,
+            "max_price": 457.4798889160156,
             "current_price": 441.7300109863281
         }
     },
     "orders_queue": [],
     "cooldown_dict": {},
-    "last_processed_date": "2026-06-13"
+    "last_processed_date": "2026-06-14"
 }
